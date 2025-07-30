@@ -11,13 +11,14 @@ const openai = createOpenAI({
 
 export async function POST(req: Request) {
   // Extract the `messages` from the body of the request
-  const { messages, id } = await req.json();
+  const { messages, id, model = "gemma3" } = await req.json();
 
   console.log("chat id", id); // can be used for persisting the chat
+  console.log("using model", model);
 
   // Call the language model
   const result = streamText({
-    model: openai("gemma3"),
+    model: openai(model),
     messages,
     async onFinish({ text, toolCalls, toolResults, usage, finishReason }) {
       // implement your own logic here, e.g. for storing messages
