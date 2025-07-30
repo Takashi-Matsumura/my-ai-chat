@@ -21,6 +21,10 @@ export async function POST(req: Request) {
     model: openai(model),
     messages,
     async onFinish({ text, toolCalls, toolResults, usage, finishReason }) {
+      console.log('=== API onFinish ===');
+      console.log('Text length:', text?.length);
+      console.log('Usage data:', JSON.stringify(usage));
+      console.log('Finish reason:', finishReason);
       // implement your own logic here, e.g. for storing messages
       // or recording token usage
     },

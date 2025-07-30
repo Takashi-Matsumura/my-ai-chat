@@ -13,9 +13,11 @@
     "@ai-sdk/react": "1.2.12",
     "@tailwindcss/typography": "^0.5.16",
     "ai": "4.3.16",
+    "gpt-tokenizer": "^3.0.1",
     "next": "latest",
     "react": "^18",
     "react-dom": "^18",
+    "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
