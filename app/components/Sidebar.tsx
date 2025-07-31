@@ -245,25 +245,25 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                             </button>
                           </div>
                         )}
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-500">
-                            {formatDate(thread.updatedAt)}
-                          </span>
-                          {thread.messages.length > 0 && (
-                            <span className="text-xs text-gray-400">
-                              • {thread.messages.length}件
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {formatDate(thread.updatedAt)}
                             </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1 space-y-0.5">
-                          <div className="flex items-center justify-between">
-                            <span>モデル: {thread.model}</span>
-                            {thread.metadata && thread.metadata.totalTokens > 0 && (
-                              <span className="text-blue-600 font-medium">
-                                {calculateTokensPerSecond(thread)} token/s
+                            {thread.messages.length > 0 && (
+                              <span className="text-xs text-gray-400">
+                                • {thread.messages.length}件
                               </span>
                             )}
                           </div>
+                          {thread.metadata && thread.metadata.totalTokens > 0 && (
+                            <span className="text-xs text-blue-600 font-medium">
+                              {calculateTokensPerSecond(thread)} token/s
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          <span>モデル: {thread.model}</span>
                         </div>
                       </div>
                       
