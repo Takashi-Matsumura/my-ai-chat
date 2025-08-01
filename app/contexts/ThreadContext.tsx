@@ -4,6 +4,25 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Message } from '@ai-sdk/react';
 import { encode } from 'gpt-tokenizer';
 
+// モデル別コンテキスト制限の定義
+export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  'gemma2:2b': 8192,
+  'gemma2:9b': 8192,
+  'gemma2:27b': 8192,
+  'llama2:latest': 4096,
+  'llama2:7b': 4096,
+  'llama2:13b': 4096,
+  'mistral:latest': 8192,
+  'mistral:7b': 8192,
+  'codellama:latest': 16384,
+  'tinyllama:latest': 2048,
+  'dsasai/llama3-elyza-jp-8b:latest': 8192,
+  'llama3:latest': 8192,
+  'llama3.1:latest': 128000,
+  'llama3.1:8b': 128000,
+  'llama3.1:70b': 128000,
+};
+
 export interface ChatThreadMetadata {
   totalTokens: number;
   promptTokens: number;
@@ -11,6 +30,13 @@ export interface ChatThreadMetadata {
   totalResponseTime: number; // milliseconds
   messageCount: number;
   averageResponseTime: number; // milliseconds
+}
+
+export interface ContextInfo {
+  currentContextTokens: number;
+  contextLimit: number;
+  usagePercentage: number;
+  warningLevel: 'safe' | 'warning' | 'danger';
 }
 
 export interface ChatThread {
@@ -35,6 +61,7 @@ interface ThreadContextType {
   updateThreadMetadata: (threadId: string, usage: any, responseTime: number, lastMessage?: Message) => void;
   updateThreadTitle: (threadId: string, title: string) => void;
   generateThreadTitle: (messages: Message[]) => string;
+  getContextInfo: (messages: Message[], model: string) => ContextInfo;
   defaultModel: string;
   setDefaultModel: (model: string) => void;
   exportToJSON: () => Promise<void>;
@@ -52,43 +79,66 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
 
   // ローカルストレージからスレッドを読み込み
   useEffect(() => {
-    const savedThreads = localStorage.getItem(STORAGE_KEY);
-    if (savedThreads) {
-      try {
-        const parsed = JSON.parse(savedThreads);
-        const threadsWithDates = parsed.map((thread: any) => ({
-          ...thread,
-          createdAt: new Date(thread.createdAt),
-          updatedAt: new Date(thread.updatedAt),
-          metadata: thread.metadata || {
-            totalTokens: 0,
-            promptTokens: 0,
-            completionTokens: 0,
-            totalResponseTime: 0,
-            messageCount: 0,
-            averageResponseTime: 0,
-          },
-        }));
-        setThreads(threadsWithDates);
-        
-        // 最新のスレッドを現在のスレッドとして設定
-        if (threadsWithDates.length > 0) {
-          const latestThread = threadsWithDates.sort((a: ChatThread, b: ChatThread) => 
-            b.createdAt.getTime() - a.createdAt.getTime()
-          )[0];
-          setCurrentThread(latestThread);
+    const loadThreads = () => {
+      const savedThreads = localStorage.getItem(STORAGE_KEY);
+      if (savedThreads) {
+        try {
+          const parsed = JSON.parse(savedThreads);
+          const threadsWithDates = parsed.map((thread: any) => ({
+            ...thread,
+            createdAt: new Date(thread.createdAt),
+            updatedAt: new Date(thread.updatedAt),
+            metadata: thread.metadata || {
+              totalTokens: 0,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalResponseTime: 0,
+              messageCount: 0,
+              averageResponseTime: 0,
+            },
+          }));
+          setThreads(threadsWithDates);
+          
+          // 最新のスレッドを現在のスレッドとして設定
+          if (threadsWithDates.length > 0) {
+            const latestThread = threadsWithDates.sort((a: ChatThread, b: ChatThread) => 
+              b.createdAt.getTime() - a.createdAt.getTime()
+            )[0];
+            setCurrentThread(latestThread);
+          }
+        } catch (error) {
+          console.error('Failed to load threads from localStorage:', error);
         }
-      } catch (error) {
-        console.error('Failed to load threads from localStorage:', error);
       }
-    }
-    // 初回起動時は空の状態でスタート
+    };
+
+    // 初期読み込み
+    loadThreads();
+
+    // ページの表示/非表示時に再読み込み（別のタブでの変更を反映）
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadThreads();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // スレッドの変更をローカルストレージに保存
   useEffect(() => {
     if (threads.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
+      // 保存前にデータを検証
+      const threadsToSave = threads.map(thread => ({
+        ...thread,
+        messages: thread.messages || [], // undefinedを防ぐ
+      }));
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(threadsToSave));
     }
   }, [threads]);
 
@@ -136,6 +186,34 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       return content.length > 30 ? content.substring(0, 30) + '...' : content;
     }
     return generateInitialTitle();
+  };
+
+  const getContextInfo = (messages: Message[], model: string): ContextInfo => {
+    // 現在の会話で送信されるトークン数を計算
+    const currentContextTokens = messages.reduce((total, message) => {
+      return total + estimateTokens(message.content);
+    }, 0);
+
+    // モデルのコンテキスト制限を取得（未知のモデルの場合はデフォルト値）
+    const contextLimit = MODEL_CONTEXT_LIMITS[model] || 4096;
+
+    // 使用率を計算
+    const usagePercentage = Math.min((currentContextTokens / contextLimit) * 100, 100);
+
+    // 警告レベルを決定
+    let warningLevel: 'safe' | 'warning' | 'danger' = 'safe';
+    if (usagePercentage >= 95) {
+      warningLevel = 'danger';
+    } else if (usagePercentage >= 80) {
+      warningLevel = 'warning';
+    }
+
+    return {
+      currentContextTokens,
+      contextLimit,
+      usagePercentage,
+      warningLevel
+    };
   };
 
   const createThread = (title?: string, model?: string): string => {
@@ -247,27 +325,18 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     try {
       // GPT-3.5/GPT-4と同じエンコーディングを使用
       const tokens = encode(text);
-      console.log('Estimated tokens using GPT tokenizer:', tokens.length, 'for text:', text.substring(0, 50) + '...');
       return tokens.length;
     } catch (error) {
       console.error('Error in token estimation:', error);
       // フォールバック: 簡易推定
       const words = text.split(/\s+/).length;
-      const estimatedTokens = Math.ceil(words * 1.3); // 単語数 × 1.3 の近似
-      console.log('Using fallback token estimation:', estimatedTokens);
-      return estimatedTokens;
+      return Math.ceil(words * 1.3); // 単語数 × 1.3 の近似
     }
   };
 
   const updateThreadMetadata = (threadId: string, usage: any, responseTime: number, lastMessage?: Message) => {
     const thread = threads.find(t => t.id === threadId);
-    if (!thread) {
-      console.log('Thread not found for metadata update:', threadId);
-      return;
-    }
-
-    console.log('Current thread metadata:', thread.metadata);
-    console.log('Updating with usage:', usage, 'responseTime:', responseTime);
+    if (!thread) return;
 
     const newTotalResponseTime = thread.metadata.totalResponseTime + responseTime;
     const newMessageCount = thread.metadata.messageCount + 1;
@@ -282,7 +351,6 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       totalTokens += usage.totalTokens || 0;
       promptTokens += usage.promptTokens || 0;
       completionTokens += usage.completionTokens || 0;
-      console.log('Using API usage data');
     } else if (lastMessage) {
       // usageデータがない場合は推定
       const estimatedTokens = estimateTokens(lastMessage.content);
@@ -292,7 +360,6 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       } else {
         promptTokens += estimatedTokens;
       }
-      console.log('Using estimated tokens:', estimatedTokens, 'for role:', lastMessage.role);
     }
 
     const newMetadata: ChatThreadMetadata = {
@@ -304,7 +371,6 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       averageResponseTime: newTotalResponseTime / newMessageCount,
     };
 
-    console.log('New metadata:', newMetadata);
     updateThread(threadId, { metadata: newMetadata });
   };
 
@@ -405,6 +471,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       updateThreadMetadata,
       updateThreadTitle,
       generateThreadTitle,
+      getContextInfo,
       defaultModel,
       setDefaultModel,
       exportToJSON,

@@ -182,16 +182,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       
       {/* サイドバー */}
       <div className={`
-        fixed left-0 top-0 h-full w-80 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ease-in-out
+        fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:translate-x-0 md:z-auto
-        flex flex-col
+        flex flex-col w-80
       `}>
         {/* ヘッダー */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">
             AIチャット履歴
           </h2>
+          {/* モバイル用閉じるボタン */}
           <button
             onClick={onClose}
             className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
@@ -207,7 +208,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 font-medium"
           >
             <HiPlus className="w-5 h-5" />
-            新しいチャット
+            <span>新しいチャット</span>
           </button>
           
           {/* エラーメッセージ */}
@@ -412,8 +413,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="text-xs text-gray-500 text-center">
             {threads.length} 個のチャット
             {autoSave && threads.length > 0 && (
-              <div className="text-green-600 mt-1 flex items-center gap-1">
-                <HiCheckCircle className="text-sm" />
+              <div className="text-green-600 mt-1 flex items-center justify-center gap-1">
+                <HiCheckCircle className="w-3 h-3" />
                 自動保存有効
               </div>
             )}

@@ -1,12 +1,12 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
+import { useChat, Message } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThread } from './contexts/ThreadContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -28,7 +28,8 @@ export default function Chat() {
     defaultModel,
     setDefaultModel,
     createThread,
-    closeCurrentThread
+    closeCurrentThread,
+    getContextInfo
   } = useThread();
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
@@ -49,45 +50,23 @@ export default function Chat() {
     initialMessages: [],
     api: '/api/chat',
     onFinish(message, { usage, finishReason }) {
-      console.log('=== onFinish called ===');
-      console.log('Message content:', message?.content?.substring(0, 50) + '...');
-      console.log('Usage data:', JSON.stringify(usage));
-      console.log('FinishReason:', finishReason);
-      console.log('CurrentThread ID:', currentThread?.id);
-      console.log('ResponseStartTime (state):', responseStartTime);
-      console.log('ResponseStartTime (ref):', responseStartTimeRef.current);
-      
-      // メタデータを更新（refを使用して確実にキャプチャ）
+      // メタデータを更新
       if (currentThread && responseStartTimeRef.current) {
         const responseTime = Date.now() - responseStartTimeRef.current;
-        console.log('Response time calculated:', responseTime, 'ms');
         
         if (usage && (usage.totalTokens > 0 || usage.promptTokens > 0 || usage.completionTokens > 0)) {
-          console.log('Updating metadata WITH usage data');
           updateThreadMetadata(currentThread.id, usage, responseTime, message);
         } else {
-          console.log('Updating metadata WITHOUT usage data (will estimate tokens)');
           updateThreadMetadata(currentThread.id, {}, responseTime, message);
         }
         responseStartTimeRef.current = null;
         setResponseStartTime(null);
-        console.log('Metadata update completed');
-      } else {
-        console.log('CANNOT update metadata - missing data:', {
-          hasCurrentThread: !!currentThread,
-          hasResponseStartTime: !!responseStartTime,
-          hasResponseStartTimeRef: !!responseStartTimeRef.current,
-          currentThreadId: currentThread?.id
-        });
       }
-      console.log('=== onFinish completed ===');
     },
     onError(error) {
-      console.log('=== onError called ===');
-      console.log('Error:', error);
+      console.error('Chat error:', error);
       // エラー時も応答時間をリセット
       if (responseStartTimeRef.current) {
-        console.log('Resetting response start time due to error');
         responseStartTimeRef.current = null;
         setResponseStartTime(null);
       }
@@ -103,9 +82,6 @@ export default function Chat() {
     const startTime = Date.now();
     setResponseStartTime(startTime);
     responseStartTimeRef.current = startTime;
-    console.log('=== Starting message submission ===');
-    console.log('Start time set:', startTime);
-    console.log('Current thread:', currentThread?.id);
     
     originalHandleSubmit(e, {
       body: {
@@ -115,54 +91,80 @@ export default function Chat() {
   };
 
   // スレッドが変更されたときにメッセージを同期
-  useEffect(() => {
-    if (currentThread) {
-      setMessages(currentThread.messages || []);
-      previousMessagesLength.current = currentThread.messages.length;
-    } else {
-      setMessages([]);
-      previousMessagesLength.current = 0;
-    }
-  }, [currentThread?.id, setMessages]);
-
-  // メッセージが変更されたときにスレッドを更新（深い比較で無限ループを防ぐ）
-  const previousMessagesLength = React.useRef(0);
+  const previousThreadId = React.useRef<string | null>(null);
   
   useEffect(() => {
-    if (currentThread && messages.length > 0) {
-      // メッセージ数が増えた場合のみ更新（新しいメッセージが追加された場合）
-      if (messages.length > previousMessagesLength.current) {
+    // スレッド読み込み開始フラグを設定
+    isLoadingThread.current = true;
+    
+    // 新しいスレッドのメッセージを読み込み
+    if (currentThread) {
+      setMessages(currentThread.messages || []);
+      previousMessagesRef.current = currentThread.messages || [];
+    } else {
+      setMessages([]);
+      previousMessagesRef.current = [];
+    }
+    
+    // 現在のスレッドIDを記録
+    previousThreadId.current = currentThread?.id || null;
+  }, [currentThread?.id]);
+
+  // メッセージが変更されたときにスレッドを更新
+  const previousMessagesRef = React.useRef<Message[]>([]);
+  const isLoadingThread = React.useRef(false);
+  
+  useEffect(() => {
+    // スレッド読み込み中は保存しない
+    if (isLoadingThread.current) {
+      isLoadingThread.current = false;
+      return;
+    }
+    
+    // 現在のスレッドがない場合は何もしない
+    if (!currentThread) return;
+    
+    // メッセージがある場合のみ更新処理を実行
+    if (messages.length > 0) {
+      // メッセージの内容に変化があった場合に更新
+      const hasChanged = 
+        messages.length !== previousMessagesRef.current.length ||
+        messages.some((msg, index) => {
+          const prevMsg = previousMessagesRef.current[index];
+          return !prevMsg || msg.content !== prevMsg.content || msg.role !== prevMsg.role;
+        });
+      
+      if (hasChanged) {
+        // 画面に表示されているメッセージをそのまま保存
         updateThreadMessages(currentThread.id, messages);
-        previousMessagesLength.current = messages.length;
+        previousMessagesRef.current = [...messages];
       }
     }
-  }, [messages.length, currentThread?.id, updateThreadMessages]);
+    
+    // メッセージが0になった場合の処理
+    if (messages.length === 0 && previousMessagesRef.current.length > 0) {
+      updateThreadMessages(currentThread.id, []);
+      previousMessagesRef.current = [];
+    }
+  }, [messages, currentThread, updateThreadMessages]);
 
   // モデル情報の取得
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        console.log('Fetching models from /api/models...');
         const response = await fetch('/api/models');
-        console.log('Response status:', response.status);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('Models data received:', data);
         
         if (data.models && data.models.length > 0) {
           setModels(data.models);
-          console.log('Models set:', data.models);
-          
           // 最初のモデルをデフォルトモデルとして設定（初回のみ）
           const firstModel = data.models[0].name;
           setDefaultModel(firstModel);
-          console.log('Default model set to:', firstModel);
-        } else {
-          console.warn('No models found in response');
         }
       } catch (error) {
         console.error('Failed to fetch models:', error);
@@ -172,7 +174,7 @@ export default function Chat() {
     };
 
     fetchModels();
-  }, []); // 依存配列を空にして初回のみ実行
+  }, []);
 
 
   const handleClearChat = () => {
@@ -180,6 +182,9 @@ export default function Chat() {
       setMessages([]);
     }
   };
+
+  // コンテキスト情報を計算
+  const contextInfo = currentThread ? getContextInfo(messages, currentThread.model) : null;
 
   if (!currentThread) {
     return (
@@ -206,15 +211,17 @@ export default function Chat() {
 
           {/* 空の状態表示 */}
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-md px-4">
+            <div className="text-center max-w-lg mx-auto px-4">
               <div className="mb-6 flex justify-center">
                 <HiChatBubbleLeftRight className="text-6xl text-blue-500" />
               </div>
               <h2 className="text-2xl font-semibold text-gray-800 mb-4">
                 AIチャットへようこそ
               </h2>
-              <p className="text-gray-600">
-                左側のサイドバーから「新しいチャット」ボタンをクリックして、AIとの対話を始めましょう。
+              <p className="text-gray-600 leading-relaxed">
+                左側のサイドバーから「新しいチャット」ボタンをクリックして、
+                <br />
+                AIとの対話を始めましょう。
               </p>
             </div>
           </div>
@@ -244,15 +251,32 @@ export default function Chat() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <div className="hidden md:block text-xs text-gray-500">
-              {currentThread.messages.length} メッセージ
-            </div>
             {currentThread.metadata && currentThread.metadata.totalTokens > 0 && (
               <div className="hidden lg:flex items-center gap-4 text-xs text-gray-500">
                 <span>{currentThread.metadata.totalTokens.toLocaleString()} トークン</span>
                 <span className="text-blue-600 font-medium">
                   {Math.round((currentThread.metadata.totalTokens / currentThread.metadata.totalResponseTime) * 1000)} token/s
                 </span>
+              </div>
+            )}
+            {contextInfo && (
+              <div className="hidden md:flex items-center gap-2 text-xs">
+                {contextInfo.warningLevel === 'danger' && (
+                  <HiExclamationTriangle className="w-4 h-4 text-red-500" />
+                )}
+                {contextInfo.warningLevel === 'warning' && (
+                  <HiExclamationTriangle className="w-4 h-4 text-yellow-500" />
+                )}
+                <div className={`flex items-center gap-1 ${
+                  contextInfo.warningLevel === 'danger' ? 'text-red-600' :
+                  contextInfo.warningLevel === 'warning' ? 'text-yellow-600' :
+                  'text-gray-500'
+                }`}>
+                  <span>{contextInfo.currentContextTokens.toLocaleString()} token</span>
+                  <span>/</span>
+                  <span>{contextInfo.contextLimit.toLocaleString()}</span>
+                  <span>({Math.round(contextInfo.usagePercentage)}%)</span>
+                </div>
               </div>
             )}
             <button
@@ -350,6 +374,32 @@ export default function Chat() {
 
         {/* 入力エリア */}
         <div className="bg-white border-t border-gray-200 p-4">
+          {contextInfo && contextInfo.warningLevel !== 'safe' && (
+            <div className={`max-w-4xl mx-auto mb-3 p-3 rounded-lg border ${
+              contextInfo.warningLevel === 'danger' 
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                <HiExclamationTriangle className={`w-4 h-4 ${
+                  contextInfo.warningLevel === 'danger' ? 'text-red-500' : 'text-yellow-500'
+                }`} />
+                <div className="text-sm font-medium">
+                  {contextInfo.warningLevel === 'danger' 
+                    ? 'コンテキスト制限に達しています'
+                    : 'コンテキスト使用量が多くなっています'
+                  }
+                </div>
+              </div>
+              <div className="text-xs mt-1">
+                現在: {contextInfo.currentContextTokens.toLocaleString()} / {contextInfo.contextLimit.toLocaleString()} トークン 
+                ({Math.round(contextInfo.usagePercentage)}% 使用)
+                {contextInfo.warningLevel === 'danger' && (
+                  <span className="block mt-1">新しいチャットを作成することをお勧めします。</span>
+                )}
+              </div>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
             <div className="flex gap-3">
               <input
@@ -361,8 +411,9 @@ export default function Chat() {
               />
               <button
                 type="submit"
-                disabled={status !== 'ready' || !input.trim()}
+                disabled={status !== 'ready' || !input.trim() || (contextInfo?.warningLevel === 'danger')}
                 className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
               >
                 <HiPaperAirplane className="w-4 h-4" />
                 送信
