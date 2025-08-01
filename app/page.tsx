@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThread } from './contexts/ThreadContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3 } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -27,7 +27,8 @@ export default function Chat() {
     updateThreadMetadata,
     defaultModel,
     setDefaultModel,
-    createThread
+    createThread,
+    closeCurrentThread
   } = useThread();
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
@@ -173,11 +174,6 @@ export default function Chat() {
     fetchModels();
   }, []); // 依存配列を空にして初回のみ実行
 
-  const handleModelChange = (model: string) => {
-    if (currentThread) {
-      updateThread(currentThread.id, { model });
-    }
-  };
 
   const handleClearChat = () => {
     if (currentThread && messages.length > 0 && confirm('このスレッドのチャット履歴をクリアしますか？')) {
@@ -215,21 +211,11 @@ export default function Chat() {
                 <HiChatBubbleLeftRight className="text-6xl text-blue-500" />
               </div>
               <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-                チャットスレッドがありません
+                AIチャットへようこそ
               </h2>
-              <p className="text-gray-600 mb-8">
-                左側のサイドバーから「新しいチャット」ボタンをクリックして、最初のチャットを始めましょう。
+              <p className="text-gray-600">
+                左側のサイドバーから「新しいチャット」ボタンをクリックして、AIとの対話を始めましょう。
               </p>
-              <button
-                onClick={() => {
-                  createThread();
-                  setSidebarOpen(false);
-                }}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium inline-flex items-center gap-2"
-              >
-                <HiChatBubbleLeftRight className="w-5 h-5" />
-                新しいチャットを開始
-              </button>
             </div>
           </div>
         </div>
@@ -257,7 +243,7 @@ export default function Chat() {
               {currentThread.title}
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <div className="hidden md:block text-xs text-gray-500">
               {currentThread.messages.length} メッセージ
             </div>
@@ -269,54 +255,31 @@ export default function Chat() {
                 </span>
               </div>
             )}
+            <button
+              onClick={handleClearChat}
+              disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
+              className="px-2 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+              title="チャット履歴をクリア"
+            >
+              <HiTrash className="w-3 h-3" />
+              <span className="hidden sm:inline">クリア</span>
+            </button>
+            <button
+              onClick={closeCurrentThread}
+              className="p-2 hover:bg-gray-100 rounded-md transition-colors text-gray-500 hover:text-gray-700"
+              title="チャットを閉じる"
+            >
+              <HiXMark className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
-        {/* モデル設定パネル */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3">
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">モデル:</span>
-              </div>
-              {loadingModels ? (
-                <div className="text-sm text-gray-500">読み込み中...</div>
-              ) : (
-                <select
-                  value={currentThread.model}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  disabled={status === 'streaming' || status === 'submitted'}
-                >
-                  {models.map((model) => (
-                    <option key={model.name} value={model.name}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-gray-500">
-                {models.length} モデル利用可能
-              </div>
-              <button
-                onClick={handleClearChat}
-                disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
-                className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-              >
-                <HiTrash className="w-3 h-3" />
-                クリア
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* チャットエリア */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 mt-12">
-              <div className="text-lg mb-2">新しいチャットを開始</div>
+              <div className="text-lg mb-2">AIとの対話を開始</div>
               <div className="text-sm">メッセージを入力してください</div>
             </div>
           ) : (

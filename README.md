@@ -4,10 +4,9 @@ Next.jsとAI SDKを使用してOllamaと連携するシンプルなチャット�
 
 ## 必要な環境
 
-- Node.js 18以上
-- Ollama（ローカルで実行）
+- Docker & Docker Compose
 
-## セットアップ
+## Dockerでのセットアップ（推奨）
 
 1. リポジトリをクローン
 ```bash
@@ -15,36 +14,71 @@ git clone <repository-url>
 cd my-ai-chat
 ```
 
-2. 依存関係をインストール
+2. Dockerコンテナを起動
+```bash
+docker-compose up -d
+```
+
+3. OllamaコンテナにLLMモデルをインストール
+```bash
+# 利用可能なモデル一覧を確認
+docker exec my-ai-chat-ollama-1 ollama list
+
+# モデルをインストール（例：軽量なTinyLlama）
+docker exec my-ai-chat-ollama-1 ollama pull tinyllama:latest
+
+# 日本語対応モデル
+docker exec my-ai-chat-ollama-1 ollama pull dsasai/llama3-elyza-jp-8b:latest
+
+# その他のモデル
+docker exec my-ai-chat-ollama-1 ollama pull gemma2:2b
+docker exec my-ai-chat-ollama-1 ollama pull mistral:latest
+docker exec my-ai-chat-ollama-1 ollama pull llama2:latest
+```
+
+4. アプリケーションにアクセス
+ブラウザで `http://localhost:13000` を開いてチャットを開始できます。
+
+### ローカル開発環境でのセットアップ
+
+1. 依存関係をインストール
 ```bash
 npm install
 ```
 
-3. Ollamaをインストールして起動
-```bash
-# Ollamaをインストール（macOS）
-brew install ollama
-
-# Gemma3モデルをダウンロード
-ollama pull gemma3
-
-# Ollamaサーバーを起動
-ollama serve
-```
-
-4. 開発サーバーを起動
+2. 開発サーバーを起動
 ```bash
 npm run dev
 ```
 
-ブラウザで `http://localhost:3000` を開いてチャットを開始できます。
+3. ブラウザで `http://localhost:3000` を開く
+
+## Docker管理コマンド
+
+```bash
+# コンテナの起動
+docker-compose up -d
+
+# コンテナの停止
+docker-compose down
+
+# ログの確認
+docker-compose logs
+
+# コンテナの状態確認
+docker-compose ps
+
+# Ollamaモデルの管理
+docker exec my-ai-chat-ollama-1 ollama list        # インストール済みモデル
+docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
+```
 
 ## 利用可能なコマンド
 
-- `npm run dev` - 開発サーバーを起動
-- `npm run build` - プロダクション用にビルド
-- `npm run start` - プロダクションサーバーを起動
-- `npm run lint` - ESLintでコードをチェック
+- `npm run dev` - 開発サーver起動
+- `npm run build` - プロダクション用ビルド
+- `npm run start` - プロダクションサーバー起動
+- `npm run lint` - ESLintチェック
 
 ## 技術スタック
 
@@ -52,20 +86,24 @@ npm run dev
 - **言語**: TypeScript
 - **スタイリング**: Tailwind CSS
 - **AI統合**: AI SDK (@ai-sdk/react, @ai-sdk/openai)
-- **LLMプロバイダー**: Ollama (Gemma3モデル)
+- **LLMプロバイダー**: Ollama
+- **デプロイ**: Docker & Docker Compose
 
 ## アーキテクチャ
 
-- フロントエンド: React + AI SDKの`useChat`フックでストリーミングチャット
-- バックエンド: Next.js API Route (`/api/chat`) でOllamaとの通信を処理
-- AI連携: `localhost:11434`で動作するOllamaのOpenAI互換APIを利用
+- **フロントエンド**: React + AI SDKの`useChat`フックでストリーミングチャット
+- **バックエンド**: Next.js API Route (`/api/chat`) でOllamaとの通信を処理  
+- **AI連携**: Dockerコンテナ内のOllamaサーバー（ポート11434）
+- **自動起動**: DockerDesktop起動時にコンテナが自動で立ち上がる
 
 ## 設定
 
-アプリケーションはデフォルトで以下の設定を使用します：
+アプリケーションの設定：
 
-- Ollama URL: `http://localhost:11434/v1`
-- モデル: `gemma3`
-- API Key: `ollama`（ローカル環境用ダミー値）
+- **Next.jsポート**: 13000
+- **Ollamaポート**: 11434  
+- **Ollama URL**: `http://ollama:11434` (コンテナ間通信)
+- **デフォルトモデル**: gemma2
+- **API Key**: "ollama" (ローカル環境用ダミー値)
 
 設定を変更する場合は `app/api/chat/route.ts` を編集してください。

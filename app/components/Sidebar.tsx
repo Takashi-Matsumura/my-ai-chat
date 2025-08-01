@@ -2,7 +2,7 @@
 
 import { useThread } from '../contexts/ThreadContext';
 import { useState, useEffect } from 'react';
-import { HiCheckCircle, HiPlus, HiXMark, HiArrowDownTray, HiArrowUpTray, HiTrash, HiCheckBadge, HiBars3, HiPencil, HiCheck } from 'react-icons/hi2';
+import { HiCheckCircle, HiPlus, HiXMark, HiArrowDownTray, HiTrash, HiCheckBadge, HiBars3, HiPencil, HiCheck, HiExclamationTriangle } from 'react-icons/hi2';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -10,10 +10,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { threads, currentThread, createThread, switchThread, deleteThread, updateThreadTitle, defaultModel, exportToJSON, importFromJSON } = useThread();
+  const { threads, currentThread, createThread, switchThread, deleteThread, updateThreadTitle, defaultModel, exportToJSON } = useThread();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState<string>('');
+  const [showModelError, setShowModelError] = useState(false);
+  const [modelErrorMessage, setModelErrorMessage] = useState('');
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const [availableModels, setAvailableModels] = useState<any[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [autoSave, setAutoSave] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('auto-save-enabled') === 'true';
@@ -21,14 +26,51 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     return false;
   });
 
-  const handleCreateThread = () => {
-    // 現在のスレッドのモデルを使用、なければデフォルトモデルを使用
-    const modelToUse = currentThread?.model || defaultModel;
-    createThread(undefined, modelToUse);
+  const handleCreateThread = async () => {
+    try {
+      // モデルチェックを実行
+      const response = await fetch('/api/models');
+      const data = await response.json();
+      
+      if (!response.ok || !data.hasModels) {
+        let errorMsg = 'OllamaにLLMモデルがインストールされていません。';
+        
+        if (!data.ollamaConnected) {
+          errorMsg = 'Ollamaサーバーに接続できません。Dockerコンテナが起動しているか確認してください。';
+        } else if (!data.hasModels) {
+          errorMsg = 'OllamaにLLMモデルがインストールされていません。README.mdの手順に従ってモデルをインストールしてください。';
+        }
+        
+        setModelErrorMessage(errorMsg);
+        setShowModelError(true);
+        return;
+      }
+      
+      // モデルが利用可能な場合、モデル選択ダイアログを表示
+      setAvailableModels(data.models);
+      setSelectedModel(data.models[0]?.name || defaultModel);
+      setShowModelSelector(true);
+      
+    } catch (error) {
+      console.error('Failed to check models:', error);
+      setModelErrorMessage('モデルの確認に失敗しました。再度お試しください。');
+      setShowModelError(true);
+    }
+  };
+
+  const handleConfirmCreateThread = () => {
+    // 選択されたモデルで新規チャットを作成
+    createThread(undefined, selectedModel);
+    setShowModelSelector(false);
+    
     // モバイルではサイドバーを閉じる
     if (window.innerWidth < 768) {
       onClose();
     }
+  };
+
+  const handleCancelCreateThread = () => {
+    setShowModelSelector(false);
   };
 
   const handleSwitchThread = (threadId: string) => {
@@ -51,15 +93,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const handleExport = async () => {
     await exportToJSON();
-  };
-
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      importFromJSON(file);
-    }
-    // ファイル選択をリセット
-    event.target.value = '';
   };
 
   const toggleAutoSave = () => {
@@ -157,7 +190,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* ヘッダー */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">
-            チャット履歴
+            AIチャット履歴
           </h2>
           <button
             onClick={onClose}
@@ -176,13 +209,70 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <HiPlus className="w-5 h-5" />
             新しいチャット
           </button>
+          
+          {/* エラーメッセージ */}
+          {showModelError && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <HiExclamationTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="text-sm text-red-800 font-medium mb-1">
+                    チャットを作成できません
+                  </div>
+                  <div className="text-xs text-red-700">
+                    {modelErrorMessage}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowModelError(false)}
+                  className="text-red-400 hover:text-red-600 transition-colors"
+                >
+                  <HiXMark className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* モデル選択ダイアログ */}
+          {showModelSelector && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-sm text-blue-800 font-medium mb-2">
+                モデルを選択してください
+              </div>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-3"
+              >
+                {availableModels.map((model) => (
+                  <option key={model.name} value={model.name}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleConfirmCreateThread}
+                  className="flex-1 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors font-medium"
+                >
+                  作成
+                </button>
+                <button
+                  onClick={handleCancelCreateThread}
+                  className="flex-1 px-3 py-1.5 text-xs bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors font-medium"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* スレッド一覧 */}
         <div className="flex-1 overflow-y-auto">
           {threads.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
-              チャット履歴がありません
+              AIチャット履歴がありません
             </div>
           ) : (
             <div className="space-y-1 p-2">
@@ -307,32 +397,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </label>
           </div>
 
-          {/* エクスポート・インポートボタン */}
-          <div className="flex flex-col gap-2 mb-3">
+          {/* エクスポートボタン */}
+          <div className="mb-3">
             <button
               onClick={handleExport}
-              className="w-full px-3 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 text-sm bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={threads.length === 0}
             >
               <HiArrowDownTray className="w-4 h-4" />
               JSONエクスポート
             </button>
-            <div className="relative">
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImport}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                id="import-file"
-              />
-              <label
-                htmlFor="import-file"
-                className="w-full px-3 py-2 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <HiArrowUpTray className="w-4 h-4" />
-                JSONインポート
-              </label>
-            </div>
           </div>
           
           <div className="text-xs text-gray-500 text-center">

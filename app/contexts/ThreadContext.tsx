@@ -28,6 +28,7 @@ interface ThreadContextType {
   currentThread: ChatThread | null;
   createThread: (title?: string, model?: string) => string;
   switchThread: (threadId: string) => void;
+  closeCurrentThread: () => void;
   deleteThread: (threadId: string) => void;
   updateThread: (threadId: string, updates: Partial<ChatThread>) => void;
   updateThreadMessages: (threadId: string, messages: Message[]) => void;
@@ -165,6 +166,10 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     if (thread) {
       setCurrentThread(thread);
     }
+  };
+
+  const closeCurrentThread = () => {
+    setCurrentThread(null);
   };
 
   const deleteThread = (threadId: string) => {
@@ -393,6 +398,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       currentThread,
       createThread,
       switchThread,
+      closeCurrentThread,
       deleteThread,
       updateThread,
       updateThreadMessages,

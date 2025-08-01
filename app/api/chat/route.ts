@@ -5,13 +5,13 @@ import { streamText } from "ai";
 export const maxDuration = 30;
 
 const openai = createOpenAI({
-  baseURL: "http://localhost:11434/v1",
+  baseURL: process.env.OLLAMA_URL ? `${process.env.OLLAMA_URL}/v1` : "http://localhost:11434/v1",
   apiKey: "ollama",
 });
 
 export async function POST(req: Request) {
   // Extract the `messages` from the body of the request
-  const { messages, id, model = "gemma3" } = await req.json();
+  const { messages, id, model = "gemma2" } = await req.json();
 
   console.log("chat id", id); // can be used for persisting the chat
   console.log("using model", model);
