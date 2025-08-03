@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThread } from './contexts/ThreadContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -18,7 +18,11 @@ interface OllamaModel {
 export default function Chat() {
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [initialInput, setInitialInput] = useState('');
+  const [initialInputStatus, setInitialInputStatus] = useState<'ready' | 'creating'>('ready');
+  const [selectedInitialModel, setSelectedInitialModel] = useState<string>('');
+  const [showModelSelector, setShowModelSelector] = useState(false);
   
   const { 
     currentThread, 
@@ -165,6 +169,7 @@ export default function Chat() {
           // 最初のモデルをデフォルトモデルとして設定（初回のみ）
           const firstModel = data.models[0].name;
           setDefaultModel(firstModel);
+          setSelectedInitialModel(firstModel);
         }
       } catch (error) {
         console.error('Failed to fetch models:', error);
@@ -183,6 +188,58 @@ export default function Chat() {
     }
   };
 
+  // 初期チャット送信ハンドラー
+  const handleInitialSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!initialInput.trim() || initialInputStatus !== 'ready') return;
+    
+    setInitialInputStatus('creating');
+    
+    try {
+      // モデルチェックを実行（既に読み込まれていればスキップ）
+      let availableModels = models;
+      if (!availableModels.length) {
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        
+        if (!response.ok || !data.hasModels) {
+          alert('OllamaにLLMモデルがインストールされていません。README.mdの手順に従ってモデルをインストールしてください。');
+          setInitialInputStatus('ready');
+          return;
+        }
+        availableModels = data.models;
+      }
+      
+      // 新しいスレッドを作成
+      const modelToUse = selectedInitialModel || availableModels[0]?.name || defaultModel;
+      const newThreadId = createThread(undefined, modelToUse);
+      
+      // 入力値をクリア
+      const inputValue = initialInput;
+      setInitialInput('');
+      setInitialInputStatus('ready');
+      
+      // 新しく作成されたスレッドに初期メッセージを追加
+      setTimeout(() => {
+        // useChatの入力フィールドに値を設定
+        handleInputChange({ target: { value: inputValue } } as any);
+        // フォームを送信
+        setTimeout(() => {
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+          const form = document.querySelector('form[data-chat-form]');
+          if (form) {
+            form.dispatchEvent(submitEvent);
+          }
+        }, 50);
+      }, 100);
+      
+    } catch (error) {
+      console.error('Failed to create initial chat:', error);
+      alert('チャットの作成に失敗しました。再度お試しください。');
+      setInitialInputStatus('ready');
+    }
+  };
+
   // コンテキスト情報を計算
   const contextInfo = currentThread ? getContextInfo(messages, currentThread.model) : null;
 
@@ -193,13 +250,15 @@ export default function Chat() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         
         {/* メインコンテンツ */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+          sidebarOpen ? 'md:ml-80' : 'md:ml-0'
+        }`}>
           {/* ヘッダー */}
           <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-md transition-colors"
               >
                 <HiBars3 className="w-5 h-5" />
               </button>
@@ -209,20 +268,111 @@ export default function Chat() {
             </div>
           </div>
 
-          {/* 空の状態表示 */}
+          {/* 初期チャット画面 */}
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-lg mx-auto px-4">
+            <div className="text-center max-w-2xl mx-auto px-4 w-full">
               <div className="mb-6 flex justify-center">
                 <HiChatBubbleLeftRight className="text-6xl text-blue-500" />
               </div>
               <h2 className="text-2xl font-semibold text-gray-800 mb-4">
                 AIチャットへようこそ
               </h2>
-              <p className="text-gray-600 leading-relaxed">
-                左側のサイドバーから「新しいチャット」ボタンをクリックして、
-                <br />
-                AIとの対話を始めましょう。
+              <p className="text-gray-600 leading-relaxed mb-8">
+                何でもお気軽にお聞きください。AIがお手伝いします。
               </p>
+              
+              
+              {/* 初期チャット入力フォーム */}
+              <form onSubmit={handleInitialSubmit} className="max-w-4xl mx-auto">
+                <div className="flex gap-3">
+                  <input
+                    className="flex-1 p-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                    value={initialInput}
+                    placeholder="メッセージを入力してください..."
+                    onChange={(e) => setInitialInput(e.target.value)}
+                    disabled={initialInputStatus !== 'ready' || loadingModels}
+                  />
+                  <button
+                    type="submit"
+                    disabled={initialInputStatus !== 'ready' || !initialInput.trim() || loadingModels}
+                    className="px-8 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 text-lg"
+                  >
+                    {initialInputStatus === 'creating' ? (
+                      <>
+                        <AiOutlineLoading3Quarters className="animate-spin w-5 h-5" />
+                        作成中...
+                      </>
+                    ) : (
+                      <>
+                        <HiPaperAirplane className="w-5 h-5" />
+                        送信
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+              
+              {/* 控えめなモデル選択 */}
+              <div className="mt-4 max-w-4xl mx-auto">
+                {/* ローディング状態 */}
+                {loadingModels && (
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 text-gray-400 text-sm">
+                      <AiOutlineLoading3Quarters className="animate-spin w-3 h-3" />
+                      モデル読み込み中...
+                    </div>
+                  </div>
+                )}
+                
+                {/* モデルが見つからない場合 */}
+                {!loadingModels && models.length === 0 && (
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 text-red-500 text-sm">
+                      <HiExclamationTriangle className="w-4 h-4" />
+                      LLMモデルが見つかりません
+                    </div>
+                  </div>
+                )}
+                
+                {/* モデル選択トグル */}
+                {!loadingModels && models.length > 0 && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowModelSelector(!showModelSelector)}
+                      className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors py-2 px-3 rounded-md hover:bg-gray-50"
+                      disabled={initialInputStatus !== 'ready'}
+                    >
+                      <HiCog6Tooth className="w-4 h-4" />
+                      <span>モデル: {selectedInitialModel || 'デフォルト'}</span>
+                      {showModelSelector ? (
+                        <HiChevronUp className="w-3 h-3" />
+                      ) : (
+                        <HiChevronDown className="w-3 h-3" />
+                      )}
+                    </button>
+                    
+                    {/* 展開されたモデル選択 */}
+                    {showModelSelector && (
+                      <div className="mt-3 max-w-md mx-auto">
+                        <select
+                          value={selectedInitialModel}
+                          onChange={(e) => setSelectedInitialModel(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          disabled={initialInputStatus !== 'ready'}
+                        >
+                          {models.map((model) => (
+                            <option key={model.name} value={model.name}>
+                              {model.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
             </div>
           </div>
         </div>
@@ -236,13 +386,15 @@ export default function Chat() {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
       {/* メインコンテンツ */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'md:ml-80' : 'md:ml-0'
+      }`}>
         {/* ヘッダー */}
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-md transition-colors"
             >
               <HiBars3 className="w-5 h-5" />
             </button>
@@ -400,7 +552,7 @@ export default function Chat() {
               </div>
             </div>
           )}
-          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto" data-chat-form>
             <div className="flex gap-3">
               <input
                 className="flex-1 p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

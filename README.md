@@ -75,7 +75,7 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 
 ## 利用可能なコマンド
 
-- `npm run dev` - 開発サーver起動
+- `npm run dev` - 開発サーバー起動 (Next.js)
 - `npm run build` - プロダクション用ビルド
 - `npm run start` - プロダクションサーバー起動
 - `npm run lint` - ESLintチェック
@@ -91,10 +91,22 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 
 ## アーキテクチャ
 
-- **フロントエンド**: React + AI SDKの`useChat`フックでストリーミングチャット
-- **バックエンド**: Next.js API Route (`/api/chat`) でOllamaとの通信を処理  
-- **AI連携**: Dockerコンテナ内のOllamaサーバー（ポート11434）
-- **自動起動**: DockerDesktop起動時にコンテナが自動で立ち上がる
+### コア構造
+- **フロントエンド**: React + AI SDK (`@ai-sdk/react`) の`useChat`フックでストリーミングチャットインターフェース
+- **バックエンド**: Next.js API Route (`/api/chat`) でローカルOllamaからのストリーミング応答を処理
+- **スタイリング**: Tailwind CSS（最小限のカスタムスタイリング）
+- **AI統合**: Ollama（`http://localhost:11434/v1`）に接続する`@ai-sdk/openai`を使用
+
+### 重要なファイル
+- `app/page.tsx` - `useChat`フックを使用するメインチャットインターフェース
+- `app/api/chat/route.ts` - OllamaへのリクエストをプロキシするAPIエンドポイント
+- `app/layout.tsx` - Interフォントとメタデータを含むルートレイアウト
+
+### チャットフロー
+1. フロントエンドの`useChat`フックでユーザー入力を処理
+2. `/api/chat`エンドポイントにメッセージを送信
+3. バックエンドが`streamText`を使用してOllamaからの応答をストリーミング
+4. フロントエンドがローディング状態とエラーハンドリングでストリーミング応答を表示
 
 ## 設定
 
@@ -103,7 +115,12 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 - **Next.jsポート**: 13000
 - **Ollamaポート**: 11434  
 - **Ollama URL**: `http://ollama:11434` (コンテナ間通信)
-- **デフォルトモデル**: gemma2
+- **デフォルトモデル**: gemma3
 - **API Key**: "ollama" (ローカル環境用ダミー値)
+
+### ローカル開発環境の要件
+- Ollamaがポート11434でローカルに実行されている必要があります
+- gemma3モデルが利用可能である必要があります  
+- アプリはOllamaのOpenAI互換APIエンドポイント（`http://localhost:11434/v1`）を期待します
 
 設定を変更する場合は `app/api/chat/route.ts` を編集してください。

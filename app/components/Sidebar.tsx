@@ -10,15 +10,12 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { threads, currentThread, createThread, switchThread, deleteThread, updateThreadTitle, defaultModel, exportToJSON } = useThread();
+  const { threads, currentThread, createThread, switchThread, deleteThread, updateThreadTitle, defaultModel, exportToJSON, closeCurrentThread } = useThread();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState<string>('');
   const [showModelError, setShowModelError] = useState(false);
   const [modelErrorMessage, setModelErrorMessage] = useState('');
-  const [showModelSelector, setShowModelSelector] = useState(false);
-  const [availableModels, setAvailableModels] = useState<any[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('');
   const [autoSave, setAutoSave] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('auto-save-enabled') === 'true';
@@ -27,55 +24,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   });
 
   const handleCreateThread = async () => {
-    try {
-      // モデルチェックを実行
-      const response = await fetch('/api/models');
-      const data = await response.json();
-      
-      if (!response.ok || !data.hasModels) {
-        let errorMsg = 'OllamaにLLMモデルがインストールされていません。';
-        
-        if (!data.ollamaConnected) {
-          errorMsg = 'Ollamaサーバーに接続できません。Dockerコンテナが起動しているか確認してください。';
-        } else if (!data.hasModels) {
-          errorMsg = 'OllamaにLLMモデルがインストールされていません。README.mdの手順に従ってモデルをインストールしてください。';
-        }
-        
-        setModelErrorMessage(errorMsg);
-        setShowModelError(true);
-        return;
-      }
-      
-      // モデルが利用可能な場合、モデル選択ダイアログを表示
-      setAvailableModels(data.models);
-      setSelectedModel(data.models[0]?.name || defaultModel);
-      setShowModelSelector(true);
-      
-    } catch (error) {
-      console.error('Failed to check models:', error);
-      setModelErrorMessage('モデルの確認に失敗しました。再度お試しください。');
-      setShowModelError(true);
-    }
-  };
-
-  const handleConfirmCreateThread = () => {
-    // 選択されたモデルで新規チャットを作成
-    createThread(undefined, selectedModel);
-    setShowModelSelector(false);
+    // 現在のスレッドを閉じて初期画面を表示
+    closeCurrentThread();
     
-    // モバイルではサイドバーを閉じる
+    // モバイルではサイドバーを閉じる（デスクトップでは開いたまま）
     if (window.innerWidth < 768) {
       onClose();
     }
   };
 
-  const handleCancelCreateThread = () => {
-    setShowModelSelector(false);
-  };
 
   const handleSwitchThread = (threadId: string) => {
     switchThread(threadId);
-    // モバイルではサイドバーを閉じる
+    // モバイルではサイドバーを閉じる（デスクトップでは開いたまま）
     if (window.innerWidth < 768) {
       onClose();
     }
@@ -184,7 +145,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className={`
         fixed left-0 top-0 h-full bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:relative md:translate-x-0 md:z-auto
+        md:fixed md:z-50
         flex flex-col w-80
       `}>
         {/* ヘッダー */}
@@ -192,10 +153,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <h2 className="text-lg font-semibold text-gray-800">
             AIチャット履歴
           </h2>
-          {/* モバイル用閉じるボタン */}
+          {/* 閉じる／折りたたみボタン */}
           <button
             onClick={onClose}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-md transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+            title="サイドバーを閉じる"
           >
             <HiXMark className="w-5 h-5" />
           </button>
@@ -211,62 +173,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <span>新しいチャット</span>
           </button>
           
-          {/* エラーメッセージ */}
-          {showModelError && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-start gap-2">
-                <HiExclamationTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="text-sm text-red-800 font-medium mb-1">
-                    チャットを作成できません
-                  </div>
-                  <div className="text-xs text-red-700">
-                    {modelErrorMessage}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowModelError(false)}
-                  className="text-red-400 hover:text-red-600 transition-colors"
-                >
-                  <HiXMark className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-          
-          {/* モデル選択ダイアログ */}
-          {showModelSelector && (
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="text-sm text-blue-800 font-medium mb-2">
-                モデルを選択してください
-              </div>
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-3"
-              >
-                {availableModels.map((model) => (
-                  <option key={model.name} value={model.name}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleConfirmCreateThread}
-                  className="flex-1 px-3 py-1.5 text-xs bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors font-medium"
-                >
-                  作成
-                </button>
-                <button
-                  onClick={handleCancelCreateThread}
-                  className="flex-1 px-3 py-1.5 text-xs bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors font-medium"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* スレッド一覧 */}
