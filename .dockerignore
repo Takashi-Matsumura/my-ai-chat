@@ -1,10 +1,47 @@
+# Dependencies
 node_modules
-.next
+npm-debug.log*
+
+# Next.js
+.next/
+out/
+
+# Production build
+build
+
+# Environment files
+.env*.local
+
+# Debug logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Git
 .git
 .gitignore
-README.md
-Dockerfile
+
+# Docker
+Dockerfile*
+docker-compose*
 .dockerignore
-npm-debug.log*
-yarn-error.log*
-.env*.local
+
+# Documentation
+README.md
+*.md
+
+# Cache
+.cache
+
+# Coverage reports
+coverage/
+
+# Temporary files
+*.tmp
+*.temp

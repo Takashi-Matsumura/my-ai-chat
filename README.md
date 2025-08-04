@@ -1,16 +1,47 @@
-# Ollama Chat
+# My AI Chat
 
-Next.jsとAI SDKを使用してOllamaと連携するシンプルなチャットアプリケーションです。
+Next.jsとAI SDKを使用してOllamaと連携する高機能チャットアプリケーションです。  
+LLMモデル管理、ダーク/ライトテーマ、チャット履歴管理など、豊富な機能を提供します。
+
+## 機能
+
+- 🤖 **LLMモデル管理**: ダウンロード、インストール、アンインストール
+- 🌓 **ダーク/ライトテーマ**: お好みのテーマでご利用いただけます
+- 💾 **チャット履歴管理**: 複数のチャットスレッドを管理
+- 📊 **メタデータ表示**: トークン数、レスポンス時間など
+- 📱 **レスポンシブデザイン**: モバイル・デスクトップ対応
+- 🔄 **リアルタイムストリーミング**: AIからの即座な応答
 
 ## 必要な環境
 
 - Docker & Docker Compose
 
-## Dockerでのセットアップ（推奨）
+## 🚀 簡単デプロイ
+
+### 自動デプロイスクリプト使用（推奨）
 
 1. リポジトリをクローン
 ```bash
-git clone <repository-url>
+git clone https://github.com/Takashi-Matsumura/my-ai-chat.git
+cd my-ai-chat
+```
+
+2. デプロイスクリプトを実行
+```bash
+./deploy.sh
+```
+
+このスクリプトが自動的に以下を実行します：
+- 既存コンテナの停止・削除
+- 新しいイメージのビルド
+- コンテナの起動
+- 動作確認
+
+### 手動デプロイ
+
+1. リポジトリをクローン
+```bash
+git clone https://github.com/Takashi-Matsumura/my-ai-chat.git
 cd my-ai-chat
 ```
 
@@ -19,25 +50,14 @@ cd my-ai-chat
 docker-compose up -d
 ```
 
-3. OllamaコンテナにLLMモデルをインストール
-```bash
-# 利用可能なモデル一覧を確認
-docker exec my-ai-chat-ollama-1 ollama list
+3. アプリケーションにアクセス  
+   ブラウザで `http://localhost:65000` を開いてチャットを開始できます。
 
-# モデルをインストール（例：軽量なTinyLlama）
-docker exec my-ai-chat-ollama-1 ollama pull tinyllama:latest
+## 🎯 アクセス先
 
-# 日本語対応モデル
-docker exec my-ai-chat-ollama-1 ollama pull dsasai/llama3-elyza-jp-8b:latest
-
-# その他のモデル
-docker exec my-ai-chat-ollama-1 ollama pull gemma2:2b
-docker exec my-ai-chat-ollama-1 ollama pull mistral:latest
-docker exec my-ai-chat-ollama-1 ollama pull llama2:latest
-```
-
-4. アプリケーションにアクセス
-ブラウザで `http://localhost:13000` を開いてチャットを開始できます。
+- **チャットアプリ**: http://localhost:65000
+- **Ollama API**: http://localhost:65434
+- **モデル管理**: http://localhost:65000/settings
 
 ### ローカル開発環境でのセットアップ
 
@@ -108,19 +128,25 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 3. バックエンドが`streamText`を使用してOllamaからの応答をストリーミング
 4. フロントエンドがローディング状態とエラーハンドリングでストリーミング応答を表示
 
-## 設定
+## ⚙️ 設定
 
-アプリケーションの設定：
-
-- **Next.jsポート**: 13000
-- **Ollamaポート**: 11434  
+### ポート設定
+- **Next.jsアプリ**: 65000
+- **Ollama API**: 65434 (外部アクセス) / 11434 (コンテナ内部)
 - **Ollama URL**: `http://ollama:11434` (コンテナ間通信)
-- **デフォルトモデル**: gemma3
-- **API Key**: "ollama" (ローカル環境用ダミー値)
 
-### ローカル開発環境の要件
-- Ollamaがポート11434でローカルに実行されている必要があります
-- gemma3モデルが利用可能である必要があります  
-- アプリはOllamaのOpenAI互換APIエンドポイント（`http://localhost:11434/v1`）を期待します
+### 環境変数
+- `NODE_ENV`: production
+- `PORT`: 65000
+- `OLLAMA_URL`: Ollamaサーバーのエンドポイント
 
-設定を変更する場合は `app/api/chat/route.ts` を編集してください。
+### モデル管理
+アプリケーション内のモデル管理画面（/settings）から以下が可能です：
+- 🔽 **ダウンロード**: 15以上のモデルから選択
+- 📦 **インストール**: バックグラウンド処理で通知付き
+- 🗑️ **アンインストール**: 不要なモデルの削除
+
+### 推奨モデル
+- **軽量**: `gemma2:2b` (1.5GB)
+- **日本語対応**: `dsasai/llama3-elyza-jp-8b` (4.6GB)
+- **高性能**: `mistral:latest` (4.1GB)

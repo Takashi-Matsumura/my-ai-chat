@@ -14,7 +14,8 @@ export async function DELETE(request: NextRequest) {
     console.log(`Starting model removal for: ${model}`);
 
     // Ollama API にモデル削除リクエストを送信
-    const response = await fetch('http://localhost:11434/api/delete', {
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const response = await fetch(`${ollamaUrl}/api/delete`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const model = searchParams.get('model');
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     
     if (!model) {
       return NextResponse.json(
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Ollama API で利用可能モデル一覧を取得
-    const response = await fetch('http://localhost:11434/api/tags');
+    const response = await fetch(`${ollamaUrl}/api/tags`);
     
     if (!response.ok) {
       return NextResponse.json(

@@ -8,7 +8,8 @@ export interface AvailableModel extends OllamaModelMaster {
 export async function GET() {
   try {
     // Ollama API で現在インストール済みのモデル一覧を取得
-    const response = await fetch('http://localhost:11434/api/tags');
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const response = await fetch(`${ollamaUrl}/api/tags`);
     
     let installedModels: string[] = [];
     

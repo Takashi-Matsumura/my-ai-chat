@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
       const downloadInfo = downloadStatus.get(model);
       
       // Ollama API で利用可能モデル一覧を取得
-      const response = await fetch('http://localhost:11434/api/tags');
+      const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+      const response = await fetch(`${ollamaUrl}/api/tags`);
       let isInstalled = false;
       
       if (response.ok) {
@@ -63,6 +64,7 @@ const downloadStatus = new Map<string, {
 export async function POST(request: NextRequest) {
   try {
     const { model, background = false } = await request.json();
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     
     if (!model) {
       return NextResponse.json(
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest) {
       downloadStatus.set(model, { status: 'downloading', progress: 0 });
       
       // 非同期でダウンロードを開始
-      startBackgroundDownload(model);
+      startBackgroundDownload(model, ollamaUrl);
       
       return NextResponse.json({
         success: true,
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 従来の同期ダウンロード
-    const response = await fetch('http://localhost:11434/api/pull', {
+    const response = await fetch(`${ollamaUrl}/api/pull`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -138,11 +140,11 @@ export async function POST(request: NextRequest) {
 }
 
 // バックグラウンドダウンロードを実行する関数
-async function startBackgroundDownload(model: string) {
+async function startBackgroundDownload(model: string, ollamaUrl: string) {
   try {
     console.log(`Starting background download for: ${model}`);
     
-    const response = await fetch('http://localhost:11434/api/pull', {
+    const response = await fetch(`${ollamaUrl}/api/pull`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
