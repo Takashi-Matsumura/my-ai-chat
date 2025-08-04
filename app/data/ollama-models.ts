@@ -35,14 +35,6 @@ export const OLLAMA_MODELS_MASTER: OllamaModelMaster[] = [
 
   // 中型・バランス型モデル
   {
-    name: 'gemma2:9b',
-    displayName: 'Gemma 2 9B',
-    description: 'Googleのバランス型モデル。性能と速度のバランスが良い',
-    size: '5.4GB',
-    capabilities: ['テキスト生成', '質問応答', '推論'],
-    recommended: true
-  },
-  {
     name: 'llama3.2:3b',
     displayName: 'Llama 3.2 3B',
     description: 'Metaの中型モデル。汎用性が高い',
@@ -72,20 +64,6 @@ export const OLLAMA_MODELS_MASTER: OllamaModelMaster[] = [
     size: '4.7GB',
     capabilities: ['テキスト生成', '質問応答', '推論', 'コード生成']
   },
-  {
-    name: 'gemma2:27b',
-    displayName: 'Gemma 2 27B',
-    description: 'Googleの大型モデル。高精度な応答',
-    size: '16GB',
-    capabilities: ['テキスト生成', '質問応答', '推論', '複雑な分析']
-  },
-  {
-    name: 'llama3.1:70b',
-    displayName: 'Llama 3.1 70B',
-    description: 'Metaの最大モデル。最高性能（要大容量メモリ）',
-    size: '40GB',
-    capabilities: ['テキスト生成', '質問応答', '推論', 'コード生成', '複雑な分析']
-  },
 
   // 専門特化モデル
   {
@@ -108,6 +86,16 @@ export const OLLAMA_MODELS_MASTER: OllamaModelMaster[] = [
     description: 'テキスト埋め込み専用モデル',
     size: '274MB',
     capabilities: ['テキスト埋め込み', 'セマンティック検索']
+  },
+
+  // 日本語特化モデル
+  {
+    name: 'lucas2024/llama-3-elyza-jp-8b:q5_k_m',
+    displayName: 'ELYZA-JP 8B',
+    description: '日本語に特化したLlama 3ベースモデル。GPT-3.5相当の性能',
+    size: '5.7GB',
+    capabilities: ['日本語対話', 'テキスト生成', '質問応答'],
+    recommended: true
   }
 ];
 
