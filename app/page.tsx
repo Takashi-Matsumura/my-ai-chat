@@ -3,11 +3,11 @@
 import { useChat, Message } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useThread } from './contexts/ThreadContext';
 import { useTheme } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -24,7 +24,7 @@ export default function Chat() {
   const [initialInputStatus, setInitialInputStatus] = useState<'ready' | 'creating'>('ready');
   const [selectedInitialModel, setSelectedInitialModel] = useState<string>('');
   const [showModelSelector, setShowModelSelector] = useState(false);
-  
+  const [showParameterSettings, setShowParameterSettings] = useState(false);
   
   // モデル存在確認の状態
   const [currentModelExists, setCurrentModelExists] = useState<boolean | null>(null);
@@ -35,6 +35,7 @@ export default function Chat() {
     updateThread, 
     updateThreadMessages,
     updateThreadMetadata,
+    updateThreadParameters,
     defaultModel,
     setDefaultModel,
     createThread,
@@ -46,6 +47,8 @@ export default function Chat() {
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const responseStartTimeRef = React.useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [shouldFocusInput, setShouldFocusInput] = useState(false);
 
   const {
     error,
@@ -95,9 +98,15 @@ export default function Chat() {
     setResponseStartTime(startTime);
     responseStartTimeRef.current = startTime;
     
+    // フォーカス復帰フラグを設定
+    setShouldFocusInput(true);
+
     originalHandleSubmit(e, {
       body: {
         model: currentThread?.model || defaultModel,
+        temperature: currentThread?.parameters?.temperature || 0.7,
+        maxTokens: currentThread?.parameters?.maxTokens || 2000,
+        contextWindowSize: currentThread?.parameters?.contextWindowSize,
       },
     });
   };
@@ -159,6 +168,30 @@ export default function Chat() {
       previousMessagesRef.current = [];
     }
   }, [messages, currentThread, updateThreadMessages]);
+
+  // input値の変化を監視してフォーカスを戻す
+  useEffect(() => {
+    if (shouldFocusInput && input === '') {
+      // input値がクリアされたタイミングでフォーカスを戻す
+      const focusInput = () => {
+        if (inputRef.current) {
+          // disabledを一時的に解除してフォーカス
+          const wasDisabled = inputRef.current.disabled;
+          if (wasDisabled) {
+            inputRef.current.disabled = false;
+          }
+          
+          inputRef.current.focus();
+        }
+      };
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(focusInput);
+      });
+      
+      setShouldFocusInput(false);
+    }
+  }, [input, shouldFocusInput]);
 
   // モデル情報の取得
   useEffect(() => {
@@ -563,6 +596,19 @@ export default function Chat() {
               )}
             </button>
             <button
+              onClick={() => setShowParameterSettings(!showParameterSettings)}
+              className={`
+                p-2 rounded-md transition-colors
+                ${theme === 'dark' 
+                  ? 'hover:bg-gray-700' 
+                  : 'hover:bg-gray-100'
+                }
+              `}
+              title="パラメータ設定"
+            >
+              <HiAdjustmentsHorizontal className="w-5 h-5 text-gray-600" />
+            </button>
+            <button
               onClick={handleClearChat}
               disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
               className="px-2 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
@@ -587,6 +633,91 @@ export default function Chat() {
           </div>
         </div>
 
+        {/* パラメータ設定パネル */}
+        {showParameterSettings && currentThread && (
+          <div className={`
+            border-b px-4 py-4
+            ${theme === 'dark' 
+              ? 'bg-gray-800 border-gray-700' 
+              : 'bg-gray-50 border-gray-200'
+            }
+          `}>
+            <div className="max-w-4xl mx-auto">
+              <h3 className={`
+                text-sm font-medium mb-4
+                ${theme === 'dark' ? 'text-white' : 'text-gray-800'}
+              `}>
+                LLMパラメータ設定 - 研究用
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Temperature設定 */}
+                <div>
+                  <label className={`
+                    block text-sm font-medium mb-2
+                    ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}
+                  `}>
+                    Temperature: {currentThread.parameters?.temperature || 0.7}
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.1"
+                    value={currentThread.parameters?.temperature || 0.7}
+                    onChange={(e) => updateThreadParameters(currentThread.id, {
+                      temperature: parseFloat(e.target.value)
+                    })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>一貫性重視 (0.1)</span>
+                    <span>創造性重視 (1.0)</span>
+                  </div>
+                </div>
+
+                {/* Context Window設定 */}
+                <div>
+                  <label className={`
+                    block text-sm font-medium mb-2
+                    ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}
+                  `}>
+                    コンテキストウィンドウ: {currentThread.parameters?.contextWindowSize ? 
+                      `${currentThread.parameters.contextWindowSize} トークン` : 
+                      'デフォルト (2000 トークン)'
+                    }
+                  </label>
+                  <input
+                    type="range"
+                    min="500"
+                    max="8000"
+                    step="500"
+                    value={currentThread.parameters?.contextWindowSize || 2000}
+                    onChange={(e) => updateThreadParameters(currentThread.id, {
+                      contextWindowSize: parseInt(e.target.value)
+                    })}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>短期記憶 (500)</span>
+                    <span>長期記憶 (8000)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`
+                mt-4 p-3 rounded-lg text-sm
+                ${theme === 'dark' 
+                  ? 'bg-blue-900 text-blue-200' 
+                  : 'bg-blue-50 text-blue-800'
+                }
+              `}>
+                <strong>研究ヒント:</strong> Temperatureを変えて同じ質問をすると、回答の創造性の違いを確認できます。
+                コンテキストウィンドウを小さくすると、長い会話での記憶力の変化を観察できます。
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* チャットエリア */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
@@ -788,6 +919,7 @@ export default function Chat() {
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto" data-chat-form>
             <div className="flex gap-3">
               <input
+                ref={inputRef}
                 className={`
                   flex-1 p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                   ${theme === 'dark'

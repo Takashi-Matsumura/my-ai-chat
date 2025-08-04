@@ -67,20 +67,6 @@ export const OLLAMA_MODELS_MASTER: OllamaModelMaster[] = [
 
   // 専門特化モデル
   {
-    name: 'codellama:7b',
-    displayName: 'Code Llama 7B',
-    description: 'プログラミング特化モデル',
-    size: '3.8GB',
-    capabilities: ['コード生成', 'コード説明', 'デバッグ支援']
-  },
-  {
-    name: 'deepseek-coder:6.7b',
-    displayName: 'DeepSeek Coder 6.7B',
-    description: 'コーディング専用の高性能モデル',
-    size: '3.8GB',
-    capabilities: ['コード生成', 'コードレビュー', 'リファクタリング']
-  },
-  {
     name: 'nomic-embed-text:latest',
     displayName: 'Nomic Embed Text',
     description: 'テキスト埋め込み専用モデル',
@@ -112,8 +98,8 @@ export const getModelsByCategory = () => {
       parseFloat(m.size) >= 10
     ),
     specialized: OLLAMA_MODELS_MASTER.filter(m => 
-      m.capabilities.includes('コード生成') || 
-      m.capabilities.includes('テキスト埋め込み')
+      m.capabilities.includes('テキスト埋め込み') ||
+      m.capabilities.includes('日本語対話')
     )
   };
 };

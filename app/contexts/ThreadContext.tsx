@@ -39,6 +39,12 @@ export interface ContextInfo {
   warningLevel: 'safe' | 'warning' | 'danger';
 }
 
+export interface LLMParameters {
+  temperature: number;
+  maxTokens: number;
+  contextWindowSize?: number;
+}
+
 export interface ChatThread {
   id: string;
   title: string;
@@ -47,6 +53,7 @@ export interface ChatThread {
   updatedAt: Date;
   model: string;
   metadata: ChatThreadMetadata;
+  parameters: LLMParameters;
 }
 
 interface ThreadContextType {
@@ -60,6 +67,7 @@ interface ThreadContextType {
   updateThreadMessages: (threadId: string, messages: Message[]) => void;
   updateThreadMetadata: (threadId: string, usage: any, responseTime: number, lastMessage?: Message) => void;
   updateThreadTitle: (threadId: string, title: string) => void;
+  updateThreadParameters: (threadId: string, parameters: Partial<LLMParameters>) => void;
   generateThreadTitle: (messages: Message[]) => string;
   getContextInfo: (messages: Message[], model: string) => ContextInfo;
   defaultModel: string;
@@ -95,6 +103,11 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
               totalResponseTime: 0,
               messageCount: 0,
               averageResponseTime: 0,
+            },
+            parameters: thread.parameters || {
+              temperature: 0.7,
+              maxTokens: 2000,
+              contextWindowSize: undefined,
             },
           }));
           setThreads(threadsWithDates);
@@ -152,6 +165,11 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
         totalResponseTime: 0,
         messageCount: 0,
         averageResponseTime: 0,
+      },
+      parameters: {
+        temperature: 0.7,
+        maxTokens: 2000,
+        contextWindowSize: undefined,
       },
     };
   };
@@ -226,6 +244,11 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
         totalResponseTime: 0,
         messageCount: 0,
         averageResponseTime: 0,
+      },
+      parameters: {
+        temperature: 0.7,
+        maxTokens: 2000,
+        contextWindowSize: undefined,
       },
     };
     
@@ -302,6 +325,14 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     if (!title.trim()) return;
     
     updateThread(threadId, { title: title.trim() });
+  };
+
+  const updateThreadParameters = (threadId: string, parameters: Partial<LLMParameters>) => {
+    const thread = threads.find(t => t.id === threadId);
+    if (!thread) return;
+
+    const updatedParameters = { ...thread.parameters, ...parameters };
+    updateThread(threadId, { parameters: updatedParameters });
   };
 
   // GPTトークナイザーを使用した正確なトークン数推定
@@ -453,6 +484,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       updateThreadMessages,
       updateThreadMetadata,
       updateThreadTitle,
+      updateThreadParameters,
       generateThreadTitle,
       getContextInfo,
       defaultModel,
