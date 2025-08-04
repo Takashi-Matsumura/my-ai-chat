@@ -1,6 +1,7 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { ThreadProvider } from './contexts/ThreadContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,9 +18,11 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className={inter.className}>
-        <ThreadProvider>
-          {children}
-        </ThreadProvider>
+        <ThemeProvider>
+          <ThreadProvider>
+            {children}
+          </ThreadProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -99,13 +99,8 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
           }));
           setThreads(threadsWithDates);
           
-          // 最新のスレッドを現在のスレッドとして設定
-          if (threadsWithDates.length > 0) {
-            const latestThread = threadsWithDates.sort((a: ChatThread, b: ChatThread) => 
-              b.createdAt.getTime() - a.createdAt.getTime()
-            )[0];
-            setCurrentThread(latestThread);
-          }
+          // 起動時は常に初期チャット画面を表示（currentThreadはnullのまま）
+          // ユーザーが明示的にスレッドを選択した場合のみスレッドを表示
         } catch (error) {
           console.error('Failed to load threads from localStorage:', error);
         }
@@ -254,18 +249,9 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     setThreads(prev => {
       const filtered = prev.filter(t => t.id !== threadId);
       
-      // 削除したスレッドが現在のスレッドの場合
+      // 削除したスレッドが現在のスレッドの場合、初期画面に戻る
       if (currentThread?.id === threadId) {
-        if (filtered.length > 0) {
-          // 他のスレッドがある場合は最新のものを選択
-          const latestThread = filtered.sort((a, b) => 
-            b.createdAt.getTime() - a.createdAt.getTime()
-          )[0];
-          setCurrentThread(latestThread);
-        } else {
-          // スレッドがない場合はcurrentThreadをnullに設定
-          setCurrentThread(null);
-        }
+        setCurrentThread(null);
       }
       
       return filtered;
@@ -442,10 +428,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
 
         setThreads(prev => [...importedThreads, ...prev]);
         
-        // 最初のインポートしたスレッドを現在のスレッドに設定
-        if (importedThreads.length > 0) {
-          setCurrentThread(importedThreads[0]);
-        }
+        // インポート後も初期画面を維持（自動選択しない）
 
         alert(`${importedThreads.length}個のチャットスレッドをインポートしました`);
         return true;

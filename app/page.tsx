@@ -5,8 +5,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useThread } from './contexts/ThreadContext';
+import { useTheme } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -24,6 +25,11 @@ export default function Chat() {
   const [selectedInitialModel, setSelectedInitialModel] = useState<string>('');
   const [showModelSelector, setShowModelSelector] = useState(false);
   
+  
+  // モデル存在確認の状態
+  const [currentModelExists, setCurrentModelExists] = useState<boolean | null>(null);
+  const [checkingModel, setCheckingModel] = useState(false);
+  
   const { 
     currentThread, 
     updateThread, 
@@ -35,6 +41,8 @@ export default function Chat() {
     closeCurrentThread,
     getContextInfo
   } = useThread();
+
+  const { theme, toggleTheme } = useTheme();
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const responseStartTimeRef = React.useRef<number | null>(null);
@@ -166,10 +174,15 @@ export default function Chat() {
         
         if (data.models && data.models.length > 0) {
           setModels(data.models);
-          // 最初のモデルをデフォルトモデルとして設定（初回のみ）
-          const firstModel = data.models[0].name;
-          setDefaultModel(firstModel);
-          setSelectedInitialModel(firstModel);
+          // デフォルトモデルが利用可能かチェックし、なければ最初のモデルを使用
+          const availableModelNames = data.models.map((m: any) => m.name);
+          if (availableModelNames.includes(defaultModel)) {
+            setSelectedInitialModel(defaultModel);
+          } else {
+            const firstModel = data.models[0].name;
+            setDefaultModel(firstModel);
+            setSelectedInitialModel(firstModel);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch models:', error);
@@ -181,6 +194,50 @@ export default function Chat() {
     fetchModels();
   }, []);
 
+  // 現在のスレッドのモデルが存在するかチェック
+  const checkCurrentModelExists = useCallback(async (modelName: string) => {
+    if (!modelName) {
+      setCurrentModelExists(false);
+      return false;
+    }
+
+    setCheckingModel(true);
+    try {
+      const response = await fetch('/api/models');
+      if (response.ok) {
+        const data = await response.json();
+        const installedModels = data.models || [];
+        
+        // モデル名の部分一致や完全一致をチェック
+        const exists = installedModels.some((m: OllamaModel) => 
+          m.name === modelName || 
+          m.name.startsWith(modelName + ':') ||
+          modelName.startsWith(m.name.split(':')[0])
+        );
+        
+        setCurrentModelExists(exists);
+        return exists;
+      } else {
+        setCurrentModelExists(false);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking model existence:', error);
+      setCurrentModelExists(false);
+      return false;
+    } finally {
+      setCheckingModel(false);
+    }
+  }, []);
+
+  // スレッド変更時にモデルの存在を確認
+  useEffect(() => {
+    if (currentThread?.model) {
+      checkCurrentModelExists(currentThread.model);
+    } else {
+      setCurrentModelExists(null);
+    }
+  }, [currentThread?.model, checkCurrentModelExists]);
 
   const handleClearChat = () => {
     if (currentThread && messages.length > 0 && confirm('このスレッドのチャット履歴をクリアしますか？')) {
@@ -243,9 +300,16 @@ export default function Chat() {
   // コンテキスト情報を計算
   const contextInfo = currentThread ? getContextInfo(messages, currentThread.model) : null;
 
+  // チャット送信が可能かどうかの判定
+  const canSendMessage = currentModelExists === true && status === 'ready' && !checkingModel;
+
+
   if (!currentThread) {
     return (
-      <div className="flex h-screen bg-gray-50">
+      <div className={`
+        flex h-screen
+        ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}
+      `}>
         {/* サイドバー */}
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         
@@ -254,17 +318,51 @@ export default function Chat() {
           sidebarOpen ? 'md:ml-80' : 'md:ml-0'
         }`}>
           {/* ヘッダー */}
-          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className={`
+            border-b px-4 py-3 flex items-center justify-between
+            ${theme === 'dark' 
+              ? 'bg-gray-800 border-gray-700' 
+              : 'bg-white border-gray-200'
+            }
+          `}>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+                className={`
+                  p-2 rounded-md transition-colors
+                  ${theme === 'dark' 
+                    ? 'hover:bg-gray-700 text-gray-300' 
+                    : 'hover:bg-gray-100 text-gray-600'
+                  }
+                `}
               >
                 <HiBars3 className="w-5 h-5" />
               </button>
-              <h1 className="text-lg font-semibold text-gray-800">
+              <h1 className={`
+                text-lg font-semibold
+                ${theme === 'dark' ? 'text-white' : 'text-gray-800'}
+              `}>
                 チャットアプリ
               </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleTheme}
+                className={`
+                  p-2 rounded-md transition-colors
+                  ${theme === 'dark' 
+                    ? 'hover:bg-gray-700' 
+                    : 'hover:bg-gray-100'
+                  }
+                `}
+                title={theme === 'light' ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
+              >
+                {theme === 'light' ? (
+                  <HiMoon className="w-5 h-5 text-gray-600" />
+                ) : (
+                  <HiSun className="w-5 h-5 text-yellow-500" />
+                )}
+              </button>
             </div>
           </div>
 
@@ -274,10 +372,16 @@ export default function Chat() {
               <div className="mb-6 flex justify-center">
                 <HiChatBubbleLeftRight className="text-6xl text-blue-500" />
               </div>
-              <h2 className="text-2xl font-semibold text-gray-800 mb-4">
+              <h2 className={`
+                text-2xl font-semibold mb-4
+                ${theme === 'dark' ? 'text-white' : 'text-gray-800'}
+              `}>
                 AIチャットへようこそ
               </h2>
-              <p className="text-gray-600 leading-relaxed mb-8">
+              <p className={`
+                leading-relaxed mb-8
+                ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}
+              `}>
                 何でもお気軽にお聞きください。AIがお手伝いします。
               </p>
               
@@ -286,7 +390,13 @@ export default function Chat() {
               <form onSubmit={handleInitialSubmit} className="max-w-4xl mx-auto">
                 <div className="flex gap-3">
                   <input
-                    className="flex-1 p-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg"
+                    className={`
+                      flex-1 p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg
+                      ${theme === 'dark'
+                        ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400'
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                      }
+                    `}
                     value={initialInput}
                     placeholder="メッセージを入力してください..."
                     onChange={(e) => setInitialInput(e.target.value)}
@@ -312,65 +422,44 @@ export default function Chat() {
                 </div>
               </form>
               
-              {/* 控えめなモデル選択 */}
-              <div className="mt-4 max-w-4xl mx-auto">
-                {/* ローディング状態 */}
-                {loadingModels && (
-                  <div className="text-center">
-                    <div className="inline-flex items-center gap-2 text-gray-400 text-sm">
-                      <AiOutlineLoading3Quarters className="animate-spin w-3 h-3" />
-                      モデル読み込み中...
-                    </div>
-                  </div>
-                )}
-                
-                {/* モデルが見つからない場合 */}
-                {!loadingModels && models.length === 0 && (
-                  <div className="text-center">
-                    <div className="inline-flex items-center gap-2 text-red-500 text-sm">
-                      <HiExclamationTriangle className="w-4 h-4" />
-                      LLMモデルが見つかりません
-                    </div>
-                  </div>
-                )}
-                
-                {/* モデル選択トグル */}
-                {!loadingModels && models.length > 0 && (
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowModelSelector(!showModelSelector)}
-                      className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm transition-colors py-2 px-3 rounded-md hover:bg-gray-50"
-                      disabled={initialInputStatus !== 'ready'}
-                    >
-                      <HiCog6Tooth className="w-4 h-4" />
-                      <span>モデル: {selectedInitialModel || 'デフォルト'}</span>
-                      {showModelSelector ? (
-                        <HiChevronUp className="w-3 h-3" />
-                      ) : (
-                        <HiChevronDown className="w-3 h-3" />
-                      )}
-                    </button>
-                    
-                    {/* 展開されたモデル選択 */}
-                    {showModelSelector && (
-                      <div className="mt-3 max-w-md mx-auto">
-                        <select
-                          value={selectedInitialModel}
-                          onChange={(e) => setSelectedInitialModel(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                          disabled={initialInputStatus !== 'ready'}
+              {/* シンプルなモデル表示とモデル管理へのリンク */}
+              <div className="mt-6 max-w-4xl mx-auto">
+                <div className="text-center">
+                  <a
+                    href="/settings"
+                    className={`
+                      inline-flex items-center gap-3 py-3 px-4 rounded-lg transition-colors cursor-pointer
+                      ${theme === 'dark' 
+                        ? 'bg-gray-800 border border-gray-700 hover:bg-gray-750 hover:border-gray-600' 
+                        : 'bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                      }
+                    `}
+                    title="クリックしてモデルを管理"
+                  >
+                    <HiCog6Tooth className={`w-4 h-4 ${theme === 'dark' ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-500 group-hover:text-gray-600'}`} />
+                    <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                      使用モデル: {selectedInitialModel || (models.length > 0 ? models[0].name : 'デフォルト')}
+                    </span>
+                  </a>
+                  
+                  {/* モデルが見つからない場合の警告 */}
+                  {!loadingModels && models.length === 0 && (
+                    <div className="mt-3">
+                      <div className={`inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                        theme === 'dark' ? 'bg-red-900 text-red-200' : 'bg-red-50 text-red-700'
+                      }`}>
+                        <HiExclamationTriangle className="w-4 h-4" />
+                        <span>LLMモデルが見つかりません</span>
+                        <a
+                          href="/settings"
+                          className="ml-2 underline hover:no-underline"
                         >
-                          {models.map((model) => (
-                            <option key={model.name} value={model.name}>
-                              {model.name}
-                            </option>
-                          ))}
-                        </select>
+                          モデルをダウンロード
+                        </a>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
               
             </div>
@@ -381,7 +470,10 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className={`
+      flex h-screen
+      ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}
+    `}>
       {/* サイドバー */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
@@ -390,23 +482,43 @@ export default function Chat() {
         sidebarOpen ? 'md:ml-80' : 'md:ml-0'
       }`}>
         {/* ヘッダー */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className={`
+          border-b px-4 py-3 flex items-center justify-between
+          ${theme === 'dark' 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-200'
+          }
+        `}>
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+              className={`
+                p-2 rounded-md transition-colors flex-shrink-0
+                ${theme === 'dark' 
+                  ? 'hover:bg-gray-700 text-gray-300' 
+                  : 'hover:bg-gray-100 text-gray-600'
+                }
+              `}
             >
               <HiBars3 className="w-5 h-5" />
             </button>
-            <h1 className="text-lg font-semibold text-gray-800 truncate">
+            <h1 className={`
+              text-lg font-semibold truncate min-w-0
+              ${theme === 'dark' ? 'text-white' : 'text-gray-800'}
+            `}
+            title={currentThread.title}
+            >
               {currentThread.title}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {currentThread.metadata && currentThread.metadata.totalTokens > 0 && (
-              <div className="hidden lg:flex items-center gap-4 text-xs text-gray-500">
+              <div className={`
+                hidden lg:flex items-center gap-4 text-xs
+                ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
+              `}>
                 <span>{currentThread.metadata.totalTokens.toLocaleString()} トークン</span>
-                <span className="text-blue-600 font-medium">
+                <span className="text-blue-500 font-medium">
                   {Math.round((currentThread.metadata.totalTokens / currentThread.metadata.totalResponseTime) * 1000)} token/s
                 </span>
               </div>
@@ -420,9 +532,11 @@ export default function Chat() {
                   <HiExclamationTriangle className="w-4 h-4 text-yellow-500" />
                 )}
                 <div className={`flex items-center gap-1 ${
-                  contextInfo.warningLevel === 'danger' ? 'text-red-600' :
-                  contextInfo.warningLevel === 'warning' ? 'text-yellow-600' :
-                  'text-gray-500'
+                  contextInfo.warningLevel === 'danger' 
+                    ? (theme === 'dark' ? 'text-red-400' : 'text-red-600')
+                    : contextInfo.warningLevel === 'warning' 
+                      ? (theme === 'dark' ? 'text-yellow-400' : 'text-yellow-600')
+                      : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')
                 }`}>
                   <span>{contextInfo.currentContextTokens.toLocaleString()} token</span>
                   <span>/</span>
@@ -431,6 +545,23 @@ export default function Chat() {
                 </div>
               </div>
             )}
+            <button
+              onClick={toggleTheme}
+              className={`
+                p-2 rounded-md transition-colors
+                ${theme === 'dark' 
+                  ? 'hover:bg-gray-700' 
+                  : 'hover:bg-gray-100'
+                }
+              `}
+              title={theme === 'light' ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
+            >
+              {theme === 'light' ? (
+                <HiMoon className="w-5 h-5 text-gray-600" />
+              ) : (
+                <HiSun className="w-5 h-5 text-yellow-500" />
+              )}
+            </button>
             <button
               onClick={handleClearChat}
               disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
@@ -442,7 +573,13 @@ export default function Chat() {
             </button>
             <button
               onClick={closeCurrentThread}
-              className="p-2 hover:bg-gray-100 rounded-md transition-colors text-gray-500 hover:text-gray-700"
+              className={`
+                p-2 rounded-md transition-colors
+                ${theme === 'dark'
+                  ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
+                  : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                }
+              `}
               title="チャットを閉じる"
             >
               <HiXMark className="w-5 h-5" />
@@ -453,8 +590,63 @@ export default function Chat() {
 
         {/* チャットエリア */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+          {/* モデル不存在時の警告バナー */}
+          {currentModelExists === false && (
+            <div className={`
+              mx-auto max-w-2xl p-4 rounded-lg border-l-4
+              ${theme === 'dark'
+                ? 'bg-red-900 border-red-600 text-red-200'
+                : 'bg-red-50 border-red-400 text-red-800'
+              }
+            `}>
+              <div className="flex items-start gap-3">
+                <HiExclamationTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-medium mb-2">
+                    LLMモデルが利用できません
+                  </h3>
+                  <p className="text-sm mb-3">
+                    このチャットで使用されるモデル「{currentThread?.model}」がサーバーにインストールされていません。
+                    チャットを続行するには、モデルをダウンロードしてください。
+                  </p>
+                  <a
+                    href="/settings"
+                    className={`
+                      inline-block px-3 py-1.5 text-xs rounded-md font-medium transition-colors
+                      ${theme === 'dark'
+                        ? 'bg-red-800 text-red-100 hover:bg-red-700'
+                        : 'bg-red-600 text-white hover:bg-red-700'
+                      }
+                    `}
+                  >
+                    モデル管理画面で解決
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* モデル確認中の表示 */}
+          {checkingModel && (
+            <div className={`
+              mx-auto max-w-2xl p-4 rounded-lg
+              ${theme === 'dark'
+                ? 'bg-blue-900 text-blue-200'
+                : 'bg-blue-50 text-blue-800'
+              }
+            `}>
+              <div className="flex items-center gap-3">
+                <AiOutlineLoading3Quarters className="w-4 h-4 animate-spin" />
+                <span className="text-sm">モデルの利用可能性を確認中...</span>
+              </div>
+            </div>
+          )}
+
           {messages.length === 0 ? (
-            <div className="text-center text-gray-500 mt-12">
+            <div className={`
+              text-center mt-12
+              ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
+            `}>
               <div className="text-lg mb-2">AIとの対話を開始</div>
               <div className="text-sm">メッセージを入力してください</div>
             </div>
@@ -465,14 +657,17 @@ export default function Chat() {
                   max-w-2xl p-4 rounded-lg
                   ${m.role === 'user' 
                     ? 'bg-blue-500 text-white' 
-                    : 'bg-white border border-gray-200 shadow-sm'
+                    : (theme === 'dark'
+                        ? 'bg-gray-800 border border-gray-700 shadow-sm'
+                        : 'bg-white border border-gray-200 shadow-sm'
+                      )
                   }
                 `}>
                   <div className="prose prose-sm max-w-none">
                     {m.role === 'user' ? (
                       <div className="whitespace-pre-wrap text-white">{m.content}</div>
                     ) : (
-                      <div className="text-gray-800">
+                      <div className={theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}>
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {m.content}
                         </ReactMarkdown>
@@ -486,8 +681,17 @@ export default function Chat() {
 
           {(status === 'submitted' || status === 'streaming') && (
             <div className="flex justify-start">
-              <div className="max-w-2xl p-4 bg-white border border-gray-200 shadow-sm rounded-lg">
-                <div className="flex items-center gap-2 text-gray-500">
+              <div className={`
+                max-w-2xl p-4 shadow-sm rounded-lg border
+                ${theme === 'dark'
+                  ? 'bg-gray-800 border-gray-700'
+                  : 'bg-white border-gray-200'
+                }
+              `}>
+                <div className={`
+                  flex items-center gap-2
+                  ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
+                `}>
                   {status === 'submitted' && (
                     <>
                       <AiOutlineLoading3Quarters className="animate-spin w-4 h-4 text-blue-500" />
@@ -509,11 +713,26 @@ export default function Chat() {
 
           {error && (
             <div className="flex justify-center">
-              <div className="max-w-md p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-                <div className="text-red-600 mb-2">エラーが発生しました</div>
+              <div className={`
+                max-w-md p-4 border rounded-lg text-center
+                ${theme === 'dark'
+                  ? 'bg-red-900 border-red-700'
+                  : 'bg-red-50 border-red-200'
+                }
+              `}>
+                <div className={`
+                  mb-2
+                  ${theme === 'dark' ? 'text-red-300' : 'text-red-600'}
+                `}>エラーが発生しました</div>
                 <button
                   type="button"
-                  className="px-3 py-1 text-sm text-red-600 border border-red-300 rounded hover:bg-red-100 transition-colors flex items-center gap-1"
+                  className={`
+                    px-3 py-1 text-sm border rounded transition-colors flex items-center gap-1
+                    ${theme === 'dark'
+                      ? 'text-red-300 border-red-600 hover:bg-red-800'
+                      : 'text-red-600 border-red-300 hover:bg-red-100'
+                    }
+                  `}
                   onClick={() => reload()}
                 >
                   <HiArrowPath className="w-3 h-3" />
@@ -525,16 +744,30 @@ export default function Chat() {
         </div>
 
         {/* 入力エリア */}
-        <div className="bg-white border-t border-gray-200 p-4">
+        <div className={`
+          border-t p-4
+          ${theme === 'dark' 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-200'
+          }
+        `}>
           {contextInfo && contextInfo.warningLevel !== 'safe' && (
             <div className={`max-w-4xl mx-auto mb-3 p-3 rounded-lg border ${
               contextInfo.warningLevel === 'danger' 
-                ? 'bg-red-50 border-red-200 text-red-800'
-                : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                ? (theme === 'dark'
+                    ? 'bg-red-900 border-red-700 text-red-200'
+                    : 'bg-red-50 border-red-200 text-red-800'
+                  )
+                : (theme === 'dark'
+                    ? 'bg-yellow-900 border-yellow-700 text-yellow-200'
+                    : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                  )
             }`}>
               <div className="flex items-center gap-2">
                 <HiExclamationTriangle className={`w-4 h-4 ${
-                  contextInfo.warningLevel === 'danger' ? 'text-red-500' : 'text-yellow-500'
+                  contextInfo.warningLevel === 'danger' 
+                    ? (theme === 'dark' ? 'text-red-400' : 'text-red-500')
+                    : (theme === 'dark' ? 'text-yellow-400' : 'text-yellow-500')
                 }`} />
                 <div className="text-sm font-medium">
                   {contextInfo.warningLevel === 'danger' 
@@ -555,15 +788,28 @@ export default function Chat() {
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto" data-chat-form>
             <div className="flex gap-3">
               <input
-                className="flex-1 p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`
+                  flex-1 p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                  ${theme === 'dark'
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                  }
+                  ${!canSendMessage ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
                 value={input}
-                placeholder="メッセージを入力してください..."
+                placeholder={
+                  currentModelExists === false 
+                    ? "モデルが利用できません..." 
+                    : checkingModel 
+                      ? "モデルを確認中..." 
+                      : "メッセージを入力してください..."
+                }
                 onChange={handleInputChange}
-                disabled={status !== 'ready'}
+                disabled={!canSendMessage}
               />
               <button
                 type="submit"
-                disabled={status !== 'ready' || !input.trim() || (contextInfo?.warningLevel === 'danger')}
+                disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger')}
                 className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
               >
