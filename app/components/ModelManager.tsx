@@ -54,13 +54,21 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
   // 重複実行を防ぐためのref
   const lastFetchUrl = useRef<string>('');
   const fetchInProgress = useRef<boolean>(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // インストール済みモデルを取得
   const fetchInstalledModels = useCallback(async () => {
-    // 重複実行を防ぐ（同じURLで実行中の場合のみ）
-    if (fetchInProgress.current && lastFetchUrl.current === ollamaUrl) {
-      return;
+    // 進行中のリクエストをキャンセル
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
+    
+    // 新しいAbortControllerを作成
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
+    // 現在のURLを記録
+    const currentUrl = ollamaUrl;
     
     fetchInProgress.current = true;
     lastFetchUrl.current = ollamaUrl;
@@ -72,18 +80,32 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
         queryParams.append('ollamaUrl', ollamaUrl);
       }
       const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await fetch(url);
+      
+      const response = await fetch(url, {
+        signal: abortController.signal
+      });
+      
       if (response.ok) {
         const data = await response.json();
-        // 新しい配列オブジェクトを作成してReactの再レンダリングを確実に行う
-        const newModels = Array.isArray(data.models) ? [...data.models] : [];
-        setInstalledModels(newModels);
+        
+        // レスポンスが返ってきた時点で、URLが変更されていないかチェック
+        if (currentUrl === ollamaUrl && !abortController.signal.aborted) {
+          // 新しい配列オブジェクトを作成してReactの再レンダリングを確実に行う
+          const newModels = Array.isArray(data.models) ? [...data.models] : [];
+          setInstalledModels(newModels);
+        }
       }
     } catch (error) {
-      // エラーハンドリング
+      // AbortErrorは無視（意図的なキャンセル）
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Failed to fetch models:', error);
+      }
     } finally {
-      setLoadingInstalled(false);
-      fetchInProgress.current = false;
+      // 現在のリクエストが最新の場合のみローディングを停止
+      if (currentUrl === ollamaUrl) {
+        setLoadingInstalled(false);
+        fetchInProgress.current = false;
+      }
     }
   }, [ollamaUrl]);
 
@@ -296,6 +318,11 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
 
   // 初期データ読み込み
   useEffect(() => {
+    // 進行中のリクエストをキャンセル
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
     // URL変更時は重複チェックをリセット
     fetchInProgress.current = false;
     lastFetchUrl.current = '';
@@ -769,10 +796,7 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
         onClose={() => setShowOllamaSettings(false)}
         onUrlChanged={() => {
           // URL変更時にモデルリストを強制的に再取得
-          lastFetchUrl.current = ''; // リセットして強制実行
-          setTimeout(() => {
-            fetchInstalledModels();
-          }, 100);
+          // useEffectが自動的に実行されるため、追加の処理は不要
         }}
       />
     </div>
