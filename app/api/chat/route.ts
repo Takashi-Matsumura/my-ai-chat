@@ -4,11 +4,6 @@ import { streamText } from "ai";
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
-const openai = createOpenAI({
-  baseURL: process.env.OLLAMA_URL ? `${process.env.OLLAMA_URL}/v1` : "http://localhost:11434/v1",
-  apiKey: "ollama",
-});
-
 export async function POST(req: Request) {
   // Extract the `messages` from the body of the request
   const { 
@@ -17,8 +12,18 @@ export async function POST(req: Request) {
     model = "gemma2",
     temperature = 0.7,
     maxTokens = 2000,
-    contextWindowSize
+    contextWindowSize,
+    ollamaUrl // フロントエンドから送信されるOllama URL
   } = await req.json();
+
+  // Ollama URLを決定（優先順位: リクエスト > 環境変数 > デフォルト）
+  const baseUrl = ollamaUrl || process.env.OLLAMA_URL || "http://localhost:11434";
+  
+  // OpenAI clientを動的に作成
+  const openai = createOpenAI({
+    baseURL: `${baseUrl}/v1`,
+    apiKey: "ollama",
+  });
 
   console.log("chat id", id);
   console.log("using model", model);

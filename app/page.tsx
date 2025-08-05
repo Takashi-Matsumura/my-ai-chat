@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useThread } from './contexts/ThreadContext';
 import { useTheme } from './contexts/ThemeContext';
+import { useOllama } from './contexts/OllamaContext';
 import Sidebar from './components/Sidebar';
 import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
@@ -44,6 +45,7 @@ export default function Chat() {
   } = useThread();
 
   const { theme, toggleTheme } = useTheme();
+  const { ollamaUrl } = useOllama();
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const responseStartTimeRef = React.useRef<number | null>(null);
@@ -107,6 +109,7 @@ export default function Chat() {
         temperature: currentThread?.parameters?.temperature || 0.7,
         maxTokens: currentThread?.parameters?.maxTokens || 2000,
         contextWindowSize: currentThread?.parameters?.contextWindowSize,
+        ollamaUrl: ollamaUrl, // 動的なOllama URL
       },
     });
   };
@@ -197,7 +200,12 @@ export default function Chat() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await fetch('/api/models');
+        const queryParams = new URLSearchParams();
+        if (ollamaUrl !== 'http://localhost:11434') {
+          queryParams.append('ollamaUrl', ollamaUrl);
+        }
+        const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const response = await fetch(url);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -225,7 +233,7 @@ export default function Chat() {
     };
 
     fetchModels();
-  }, []);
+  }, [ollamaUrl]);
 
   // 現在のスレッドのモデルが存在するかチェック
   const checkCurrentModelExists = useCallback(async (modelName: string) => {
@@ -236,7 +244,12 @@ export default function Chat() {
 
     setCheckingModel(true);
     try {
-      const response = await fetch('/api/models');
+      const queryParams = new URLSearchParams();
+      if (ollamaUrl !== 'http://localhost:11434') {
+        queryParams.append('ollamaUrl', ollamaUrl);
+      }
+      const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         const installedModels = data.models || [];
@@ -261,7 +274,7 @@ export default function Chat() {
     } finally {
       setCheckingModel(false);
     }
-  }, []);
+  }, [ollamaUrl]);
 
   // スレッド変更時にモデルの存在を確認
   useEffect(() => {
@@ -289,7 +302,12 @@ export default function Chat() {
       // モデルチェックを実行（既に読み込まれていればスキップ）
       let availableModels = models;
       if (!availableModels.length) {
-        const response = await fetch('/api/models');
+        const queryParams = new URLSearchParams();
+        if (ollamaUrl !== 'http://localhost:11434') {
+          queryParams.append('ollamaUrl', ollamaUrl);
+        }
+        const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const response = await fetch(url);
         const data = await response.json();
         
         if (!response.ok || !data.hasModels) {

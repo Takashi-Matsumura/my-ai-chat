@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { HiArrowLeft, HiArrowDownTray, HiCheckCircle, HiCog6Tooth, HiExclamationTriangle, HiTrash } from 'react-icons/hi2';
+import { useOllama } from '../contexts/OllamaContext';
+import { HiArrowLeft, HiArrowDownTray, HiCheckCircle, HiCog6Tooth, HiExclamationTriangle, HiTrash, HiServerStack } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
+import OllamaSettingsDialog from './OllamaSettingsDialog';
 
 interface AvailableModel {
   name: string;
@@ -29,6 +31,7 @@ interface ModelManagerProps {
 
 export default function ModelManager({ onClose, onModelSelected, selectedModel }: ModelManagerProps) {
   const { theme } = useTheme();
+  const { ollamaUrl } = useOllama();
   
   // 状態管理
   const [installedModels, setInstalledModels] = useState<OllamaModel[]>([]);
@@ -44,21 +47,45 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
   const [uninstallingModel, setUninstallingModel] = useState<string | null>(null);
   const [isUninstallBlocked, setIsUninstallBlocked] = useState(false);
 
+  // Ollama設定ダイアログの状態
+  const [showOllamaSettings, setShowOllamaSettings] = useState(false);
+  
+  
+  // 重複実行を防ぐためのref
+  const lastFetchUrl = useRef<string>('');
+  const fetchInProgress = useRef<boolean>(false);
+
   // インストール済みモデルを取得
-  const fetchInstalledModels = async () => {
+  const fetchInstalledModels = useCallback(async () => {
+    // 重複実行を防ぐ（同じURLで実行中の場合のみ）
+    if (fetchInProgress.current && lastFetchUrl.current === ollamaUrl) {
+      return;
+    }
+    
+    fetchInProgress.current = true;
+    lastFetchUrl.current = ollamaUrl;
     setLoadingInstalled(true);
+    
     try {
-      const response = await fetch('/api/models');
+      const queryParams = new URLSearchParams();
+      if (ollamaUrl !== 'http://localhost:11434') {
+        queryParams.append('ollamaUrl', ollamaUrl);
+      }
+      const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        setInstalledModels(data.models || []);
+        // 新しい配列オブジェクトを作成してReactの再レンダリングを確実に行う
+        const newModels = Array.isArray(data.models) ? [...data.models] : [];
+        setInstalledModels(newModels);
       }
     } catch (error) {
-      console.error('Failed to fetch installed models:', error);
+      // エラーハンドリング
     } finally {
       setLoadingInstalled(false);
+      fetchInProgress.current = false;
     }
-  };
+  }, [ollamaUrl]);
 
   // 利用可能モデルを取得
   const fetchAvailableModels = async () => {
@@ -96,7 +123,8 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
         },
         body: JSON.stringify({ 
           model: modelName,
-          background: true // バックグラウンドダウンロードを指定
+          background: true, // バックグラウンドダウンロードを指定
+          ollamaUrl: ollamaUrl // 動的なOllama URL
         }),
       });
 
@@ -140,7 +168,11 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
 
     const checkProgress = async () => {
       try {
-        const response = await fetch(`/api/ollama/pull?model=${encodeURIComponent(modelName)}`);
+        const queryParams = new URLSearchParams({ model: modelName });
+        if (ollamaUrl !== 'http://localhost:11434') {
+          queryParams.append('ollamaUrl', ollamaUrl);
+        }
+        const response = await fetch(`/api/ollama/pull?${queryParams.toString()}`);
         const data = await response.json();
         
         if (data.downloadStatus) {
@@ -208,7 +240,10 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: modelName }),
+        body: JSON.stringify({ 
+          model: modelName,
+          ollamaUrl: ollamaUrl // 動的なOllama URL
+        }),
       });
 
       const result = await response.json();
@@ -237,7 +272,12 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
   // サーバー側の進行中ダウンロードを同期
   const syncDownloadingModels = async () => {
     try {
-      const response = await fetch('/api/ollama/pull');
+      const queryParams = new URLSearchParams();
+      if (ollamaUrl !== 'http://localhost:11434') {
+        queryParams.append('ollamaUrl', ollamaUrl);
+      }
+      const url = `/api/ollama/pull${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         if (data.activeDownloads && Array.isArray(data.activeDownloads)) {
@@ -256,6 +296,14 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
 
   // 初期データ読み込み
   useEffect(() => {
+    // URL変更時は重複チェックをリセット
+    fetchInProgress.current = false;
+    lastFetchUrl.current = '';
+    
+    // URL変更時に状態を明示的にクリア
+    setInstalledModels([]);
+    setLoadingInstalled(true);
+    
     fetchInstalledModels();
     fetchAvailableModels();
     syncDownloadingModels(); // サーバー側の状態と同期
@@ -264,7 +312,7 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
-  }, []);
+  }, [ollamaUrl, fetchInstalledModels]);
 
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -294,6 +342,22 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
               モデルの選択、ダウンロード、インストールを管理
             </p>
           </div>
+
+          {/* Ollamaサーバー設定ボタン */}
+          <button
+            onClick={() => setShowOllamaSettings(true)}
+            className={`
+              flex items-center gap-2 px-3 py-2 rounded-md transition-colors mr-4
+              ${theme === 'dark' 
+                ? 'hover:bg-gray-700 text-gray-300 hover:text-white' 
+                : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
+              }
+            `}
+            title="Ollamaサーバー設定"
+          >
+            <HiServerStack className="w-4 h-4" />
+            <span className="text-sm font-medium">サーバー設定</span>
+          </button>
           
           {/* バックグラウンドタスク表示 */}
           {downloadingModels.size > 0 && (
@@ -698,6 +762,19 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
           </div>
         </div>
       )}
+
+      {/* Ollama設定ダイアログ */}
+      <OllamaSettingsDialog 
+        isOpen={showOllamaSettings}
+        onClose={() => setShowOllamaSettings(false)}
+        onUrlChanged={() => {
+          // URL変更時にモデルリストを強制的に再取得
+          lastFetchUrl.current = ''; // リセットして強制実行
+          setTimeout(() => {
+            fetchInstalledModels();
+          }, 100);
+        }}
+      />
     </div>
   );
 }

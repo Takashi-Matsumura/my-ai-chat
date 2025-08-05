@@ -2,6 +2,7 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import { ThreadProvider } from './contexts/ThreadContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { OllamaProvider } from './contexts/OllamaContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,9 +20,11 @@ export default function RootLayout({
     <html lang="ja">
       <body className={inter.className}>
         <ThemeProvider>
-          <ThreadProvider>
-            {children}
-          </ThreadProvider>
+          <OllamaProvider>
+            <ThreadProvider>
+              {children}
+            </ThreadProvider>
+          </OllamaProvider>
         </ThemeProvider>
       </body>
     </html>

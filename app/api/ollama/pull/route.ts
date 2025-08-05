@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
       const downloadInfo = downloadStatus.get(model);
       
       // Ollama API で利用可能モデル一覧を取得
-      const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+      const customOllamaUrl = searchParams.get('ollamaUrl');
+      const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
       const response = await fetch(`${ollamaUrl}/api/tags`);
       let isInstalled = false;
       
@@ -63,8 +64,8 @@ const downloadStatus = new Map<string, {
 
 export async function POST(request: NextRequest) {
   try {
-    const { model, background = false } = await request.json();
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const { model, background = false, ollamaUrl: customOllamaUrl } = await request.json();
+    const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
     
     if (!model) {
       return NextResponse.json(

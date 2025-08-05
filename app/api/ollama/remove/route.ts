@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { model } = await request.json();
+    const { model, ollamaUrl: customOllamaUrl } = await request.json();
     
     if (!model) {
       return NextResponse.json(
@@ -14,7 +14,7 @@ export async function DELETE(request: NextRequest) {
     console.log(`Starting model removal for: ${model}`);
 
     // Ollama API にモデル削除リクエストを送信
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
     const response = await fetch(`${ollamaUrl}/api/delete`, {
       method: 'DELETE',
       headers: {
@@ -77,7 +77,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const model = searchParams.get('model');
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const customOllamaUrl = searchParams.get('ollamaUrl');
+    const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
     
     if (!model) {
       return NextResponse.json(
