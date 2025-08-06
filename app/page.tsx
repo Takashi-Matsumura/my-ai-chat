@@ -200,10 +200,10 @@ export default function Chat() {
     
     // 新しいスレッドのメッセージを読み込み
     if (currentThread) {
-      setMessages(currentThread.messages || []);
+      (setMessages as any)(currentThread.messages || []);
       previousMessagesRef.current = currentThread.messages || [];
     } else {
-      setMessages([]);
+      (setMessages as any)([]);
       previousMessagesRef.current = [];
     }
     
@@ -388,7 +388,7 @@ export default function Chat() {
 
   const handleClearChat = () => {
     if (currentThread && messages.length > 0 && confirm('このスレッドのチャット履歴をクリアしますか？')) {
-      setMessages([]);
+(setMessages as any)([]);
     }
   };
 

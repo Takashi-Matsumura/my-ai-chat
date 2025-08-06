@@ -5,7 +5,8 @@ LLMモデル管理、ダーク/ライトテーマ、チャット履歴管理な�
 
 ## 機能
 
-- 🤖 **LLMモデル管理**: ダウンロード、インストール、アンインストール
+- 🤖 **LLMモデル管理**: ダウンロード、インストール、アンインストール、モデル詳細情報表示
+- 🧠 **Thinking機能**: gpt-ossモデルで思考プロセスを可視化
 - 🌓 **ダーク/ライトテーマ**: お好みのテーマでご利用いただけます
 - 💾 **チャット履歴管理**: 複数のチャットスレッドを管理
 - 📊 **メタデータ表示**: トークン数、レスポンス時間など
@@ -14,6 +15,7 @@ LLMモデル管理、ダーク/ライトテーマ、チャット履歴管理な�
 - ⚙️ **Ollama サーバー切り替え**: アプリ内で複数のOllamaサーバーを動的に切り替え
 - 🌐 **プロキシ対応**: 企業環境・社内プロキシでの利用をサポート
 - 🔧 **環境変数設定**: .env.local での柔軟な設定管理
+- 📄 **データのインポート/エクスポート**: チャット履歴のバックアップと復元
 
 ## 必要な環境
 
@@ -54,13 +56,35 @@ docker-compose up -d
 ```
 
 3. アプリケーションにアクセス  
-   ブラウザで `http://localhost:65010` を開いてチャットを開始できます。
+   ブラウザで `http://localhost:8888` を開いてチャットを開始できます。
 
 ## 🎯 アクセス先
 
-- **チャットアプリ**: http://localhost:65010
-- **Ollama API**: http://localhost:65434
-- **モデル管理**: http://localhost:65010/settings
+- **チャットアプリ**: http://localhost:8888
+- **モデル管理**: http://localhost:8888/settings
+
+## 🔧 初回セットアップ
+
+新規ユーザーは初回アクセス時に以下の設定が必要です：
+
+### 1. Ollamaサーバー設定
+1. 右上の歯車アイコン → 「サーバー設定」をクリック
+2. Ollama サーバー URL を設定:
+   - **ローカル環境**: `http://localhost:11434`
+   - **リモートサーバー**: `http://[IPアドレス]:11434`
+3. 「接続テスト」で動作確認後、「保存」
+
+### 2. プロキシ設定 (社内環境の場合)
+1. 右上の歯車アイコン → 「プロキシ設定」をクリック
+2. プロキシサーバー情報を入力:
+   ```
+   HTTPプロキシ: http://proxy.company.com:8080
+   HTTPSプロキシ: http://proxy.company.com:8080
+   プロキシ除外: localhost,127.0.0.1,::1,[ローカルIPアドレス]
+   ```
+3. 「プロキシを有効にする」にチェックを入れ、「保存」
+
+**注意**: これらの設定はブラウザのlocalStorageに保存され、各ユーザーが個別に設定する必要があります。
 
 ### ローカル開発環境でのセットアップ
 
@@ -134,9 +158,9 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 ## ⚙️ 設定
 
 ### ポート設定
-- **Next.jsアプリ**: 65010
-- **Ollama API**: 65434 (外部アクセス) / 11434 (コンテナ内部)
-- **Ollama URL**: `http://host.docker.internal:11434` (コンテナから ホストへの通信)
+- **Next.jsアプリ**: 8888 (Dockerコンテナ)
+- **Ollama サーバー**: 11434 (ホストマシン)
+- **内部通信URL**: `http://host.docker.internal:11434` (コンテナからホストへの通信)
 
 ### Ollamaサーバー設定
 
@@ -144,13 +168,13 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 アプリケーション内で複数のOllamaサーバーを動的に切り替えることができます。
 
 - **設定場所**: モデル管理画面（/settings）の「サーバー設定」ボタン
-- **デフォルト**: `http://localhost:11434`
+- **デフォルト**: `http://host.docker.internal:11434`
 - **設定保存**: ブラウザのlocalStorageに永続化
 - **接続テスト**: 設定前にサーバーの動作確認が可能
 
 #### 使用例
-- **PC上のOllama**: `http://localhost:11434`
-- **Docker内のOllama**: `http://localhost:11435`
+- **ローカルOllama**: `http://localhost:11434`
+- **カスタムポート**: `http://localhost:11435`
 - **リモートサーバー**: `http://192.168.1.100:11434`
 
 ### 環境変数設定
@@ -162,7 +186,7 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 
 ```bash
 # Ollama設定
-OLLAMA_URL=http://localhost:11434
+OLLAMA_URL=http://host.docker.internal:11434
 
 # プロキシ設定（社内プロキシ環境の場合）
 HTTP_PROXY=http://proxy.company.com:8080

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 
 interface Message {
   id: string;
@@ -171,6 +171,6 @@ export function useThinkingChat({ api, onFinish, onError }: UseThinkingChatOptio
     handleSubmit,
     stop,
     reload,
-    setMessages,
+    setMessages: setMessages as React.Dispatch<React.SetStateAction<Message[]>>,
   };
 }

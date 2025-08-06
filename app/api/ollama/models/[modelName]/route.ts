@@ -56,10 +56,10 @@ interface ProcessedModelMetadata {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { modelName: string } }
+  { params }: { params: Promise<{ modelName: string }> }
 ) {
   try {
-    const { modelName } = params;
+    const { modelName } = await params;
     const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     
     // Ollama APIからモデル詳細情報を取得

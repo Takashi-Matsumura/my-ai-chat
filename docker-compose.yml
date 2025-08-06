@@ -4,43 +4,12 @@ services:
   nextjs:
     build: .
     ports:
-      - "65010:65010"
+      - "8888:8888"
     environment:
       - NODE_ENV=production
-      - PORT=65010
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - PORT=8888
+      - OLLAMA_URL=http://host.docker.internal:11434
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1,host.docker.internal}
-    depends_on:
-      - ollama
     restart: unless-stopped
-    networks:
-      - my-ai-chat-network
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "65434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: unless-stopped
-    networks:
-      - my-ai-chat-network
-    # GPU サポート (NVIDIA GPU がある場合)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-volumes:
-  ollama_data:
-
-networks:
-  my-ai-chat-network:
-    driver: bridge

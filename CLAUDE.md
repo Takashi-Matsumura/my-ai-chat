@@ -25,15 +25,21 @@ This is a Next.js 14+ chat application using the AI SDK to interface with Ollama
 - **Backend**: Next.js API route (`/api/chat`) handling streaming responses from local Ollama
 - **Styling**: Tailwind CSS with minimal custom styling
 - **AI Integration**: Uses `@ai-sdk/openai` configured to connect to Ollama
+- **Thinking Support**: Custom streaming implementation for gpt-oss models with thinking process visualization
 - **Proxy Support**: Server-side proxy handling for corporate environments
 - **Environment Configuration**: Environment variable support via `.env.local`
+- **Data Storage**: Client-side localStorage for all settings and chat data
 
 ### Key Files
-- `app/page.tsx` - Main chat interface using `useChat` hook
-- `app/api/chat/route.ts` - API endpoint that proxies requests to Ollama with environment variable support
+- `app/page.tsx` - Main chat interface using `useChat` hook with dual support for standard and thinking models
+- `app/api/chat/route.ts` - API endpoint that proxies requests to Ollama with thinking support for gpt-oss models
+- `app/hooks/useThinkingChat.ts` - Custom chat hook for models with thinking process support
+- `app/components/ModelInfoDialog.tsx` - Model metadata and technical specifications display
+- `app/api/ollama/models/[modelName]/route.ts` - API endpoint for fetching detailed model information
 - `app/layout.tsx` - Root layout with system fonts and metadata
 - `app/contexts/OllamaContext.tsx` - Ollama server management and dynamic switching
 - `app/contexts/ProxyContext.tsx` - Proxy settings management
+- `app/contexts/ThreadContext.tsx` - Chat thread management with localStorage persistence
 - `app/components/OllamaSettingsDialog.tsx` - Ollama server configuration UI
 - `app/components/ProxySettingsDialog.tsx` - Proxy configuration UI
 - `app/api/ollama/test/route.ts` - Server-side Ollama connection testing
@@ -53,7 +59,7 @@ The application supports environment variable configuration via `.env.local`:
 
 ```bash
 # Ollama Configuration
-OLLAMA_URL=http://localhost:11434
+OLLAMA_URL=http://host.docker.internal:11434
 
 # Proxy Settings (for corporate environments)
 HTTP_PROXY=http://proxy.company.com:8080
@@ -65,14 +71,28 @@ PORT=3000
 ```
 
 ### Docker Deployment
-- **Application Port**: 65010 (configurable via docker-compose.yml)
-- **Ollama API Port**: 65434 (external access to Docker Ollama)
+- **Application Port**: 8888 (configurable via docker-compose.yml)
+- **Ollama Server**: Runs on host machine port 11434
 - **Network**: Uses `host.docker.internal` for container-to-host communication
-- **Environment Variables**: Automatically inherited from host environment
+- **Environment Variables**: Automatically inherited from host environment via `.env.local`
+
+### Data Storage and Security
+- **Settings Storage**: All user settings stored in browser localStorage
+- **Chat Data**: All chat history stored in browser localStorage
+- **Server Storage**: No sensitive data stored on server side
+- **Privacy**: Each user's settings are isolated and private to their browser
 
 ### Chat Flow
-1. User input handled by `useChat` hook in frontend
-2. Messages sent to `/api/chat` endpoint
-3. Backend streams response from Ollama using `streamText` with configurable Ollama URL
-4. Frontend displays streaming response with loading states and error handling
-5. Server-side connection testing available via `/api/ollama/test` to bypass CORS issues
+1. User input handled by `useChat` hook (standard models) or `useThinkingChat` hook (gpt-oss models) in frontend
+2. Messages sent to `/api/chat` endpoint with model-specific routing
+3. For gpt-oss models: Custom streaming implementation fetches thinking process first, then streams content
+4. For standard models: Backend streams response from Ollama using `streamText` with configurable Ollama URL
+5. Frontend displays streaming response with loading states, error handling, and thinking process visualization
+6. Server-side connection testing available via `/api/ollama/test` to bypass CORS issues
+
+### Initial User Setup
+New users must configure two settings on first access:
+1. **Ollama Server URL**: Configure connection to local or remote Ollama server
+2. **Proxy Settings**: Configure corporate proxy if in enterprise environment
+
+All settings are stored in browser localStorage and must be configured per user/browser.
