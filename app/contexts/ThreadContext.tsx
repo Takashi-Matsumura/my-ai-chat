@@ -21,6 +21,7 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   'llama3.1:latest': 128000,
   'llama3.1:8b': 128000,
   'llama3.1:70b': 128000,
+  'gpt-oss:20b': 131072, // 128K context window
 };
 
 export interface ChatThreadMetadata {
@@ -83,7 +84,7 @@ const STORAGE_KEY = 'chat-threads';
 export function ThreadProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [currentThread, setCurrentThread] = useState<ChatThread | null>(null);
-  const [defaultModel, setDefaultModel] = useState<string>('llama3.1');
+  const [defaultModel, setDefaultModel] = useState<string>('gpt-oss:20b');
 
   // ローカルストレージからスレッドを読み込み
   useEffect(() => {

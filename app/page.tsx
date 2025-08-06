@@ -1,6 +1,7 @@
 'use client';
 
-import { useChat, Message } from '@ai-sdk/react';
+import { useChat, Message as BaseMessage } from '@ai-sdk/react';
+import { useThinkingChat } from './hooks/useThinkingChat';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -16,6 +17,11 @@ interface OllamaModel {
   name: string;
   size: number;
   modified_at: string;
+}
+
+// Extended message type for thinking support
+interface Message extends BaseMessage {
+  thinking?: string;
 }
 
 export default function Chat() {
@@ -55,18 +61,11 @@ export default function Chat() {
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const [shouldFocusInput, setShouldFocusInput] = useState(false);
 
+  // gpt-oss モデルかどうかを判定
+  const isGptOssModel = currentThread?.model?.includes('gpt-oss') || false;
+  
 
-  const {
-    error,
-    input,
-    status,
-    handleInputChange,
-    handleSubmit: originalHandleSubmit,
-    messages,
-    reload,
-    stop,
-    setMessages,
-  } = useChat({
+  const standardChatHook = useChat({
     id: currentThread?.id || 'default',
     initialMessages: [],
     api: '/api/chat',
@@ -94,55 +93,79 @@ export default function Chat() {
     },
   });
 
-  // 自動スクロール関数 - ユーザーメッセージが見える位置まで
-  const scrollToUserMessage = useCallback((forceToBottom = false) => {
+  const thinkingChatHook = useThinkingChat({
+    api: '/api/chat',
+    onFinish(message) {
+      // メタデータを更新（thinking chat用）
+      if (currentThread && responseStartTimeRef.current) {
+        const responseTime = Date.now() - responseStartTimeRef.current;
+        updateThreadMetadata(currentThread.id, {}, responseTime, message);
+        responseStartTimeRef.current = null;
+        setResponseStartTime(null);
+      }
+    },
+    onError(error) {
+      console.error('Thinking chat error:', error);
+      if (responseStartTimeRef.current) {
+        responseStartTimeRef.current = null;
+        setResponseStartTime(null);
+      }
+    },
+  });
+
+  // 現在のモデルに応じて適切なフックを選択
+  const {
+    error,
+    input,
+    status,
+    handleInputChange,
+    handleSubmit: originalHandleSubmit,
+    messages,
+    reload,
+    stop,
+    setMessages,
+  } = isGptOssModel ? thinkingChatHook : standardChatHook;
+
+  // ストリーミング中用：最下部へスクロール
+  const scrollToBottom = useCallback(() => {
     if (!chatAreaRef.current) return;
-
-    // 強制的に最下部へスクロールする場合（メッセージ送信直後など）
-    if (forceToBottom || status === 'submitted') {
-      chatAreaRef.current.scrollTo({
-        top: chatAreaRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-      return;
-    }
-
-    // ストリーミング中で、メッセージが存在する場合は最後のユーザーメッセージ位置を維持
-    if (messages.length > 0 && status === 'streaming') {
-      // 最後のユーザーメッセージを探す
-      let lastUserMessageIndex = -1;
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user') {
-          lastUserMessageIndex = i;
-          break;
-        }
-      }
-      
-      if (lastUserMessageIndex >= 0) {
-        // メッセージ要素を取得
-        const messageElements = chatAreaRef.current.querySelectorAll('.message-item');
-        const targetElement = messageElements[lastUserMessageIndex];
-        
-        if (targetElement) {
-          // ユーザーメッセージが上部付近に表示されるようにスクロール
-          const elementTop = (targetElement as HTMLElement).offsetTop;
-          const scrollTop = Math.max(0, elementTop - 80); // 80px余白
-          
-          chatAreaRef.current.scrollTo({
-            top: scrollTop,
-            behavior: 'smooth'
-          });
-          return;
-        }
-      }
-    }
     
-    // その他の場合：最下部へスクロール
-    chatAreaRef.current.scrollTo({
-      top: chatAreaRef.current.scrollHeight,
+    const element = chatAreaRef.current;
+    element.scrollTo({
+      top: element.scrollHeight,
       behavior: 'smooth'
     });
-  }, [messages, status]);
+  }, []);
+
+  // 完了時用：質問メッセージが右上に来るようにスクロール
+  const scrollToQuestionMessage = useCallback(() => {
+    if (!chatAreaRef.current || messages.length === 0) return;
+    
+    // 最後のユーザーメッセージを探す
+    let lastUserMessageIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserMessageIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserMessageIndex >= 0) {
+      const messageElements = chatAreaRef.current.querySelectorAll('.message-item');
+      const targetElement = messageElements[lastUserMessageIndex];
+      
+      if (targetElement) {
+        // 質問メッセージが右上（画面上部）に来る位置にスクロール
+        const elementTop = (targetElement as HTMLElement).offsetTop;
+        const scrollTop = Math.max(0, elementTop - 80); // 80px余白
+        
+        chatAreaRef.current.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }, [messages]);
 
   // カスタムハンドラーでモデルを動的に設定
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -166,9 +189,6 @@ export default function Chat() {
         ollamaUrl: ollamaUrl, // 動的なOllama URL
       },
     });
-
-    // 少し遅らせて自動スクロール（送信直後は最下部へ）
-    setTimeout(() => scrollToUserMessage(true), 100);
   };
 
   // スレッドが変更されたときにメッセージを同期
@@ -189,7 +209,7 @@ export default function Chat() {
     
     // 現在のスレッドIDを記録
     previousThreadId.current = currentThread?.id || null;
-  }, [currentThread?.id]);
+  }, [currentThread?.id, setMessages]);
 
   // メッセージが変更されたときにスレッドを更新
   const previousMessagesRef = React.useRef<Message[]>([]);
@@ -253,28 +273,29 @@ export default function Chat() {
     }
   }, [input, shouldFocusInput]);
 
-  // メッセージが変更されたときの自動スクロール
+  // ストリーミング中：メッセージ更新時に最下部へスクロール
   useEffect(() => {
-    // メッセージが追加されたとき、またはストリーミング中にスクロール
-    if (messages.length > 0) {
+    if (status === 'streaming' && messages.length > 0) {
       // 少し遅らせて確実にDOMが更新された後にスクロール
       const timeoutId = setTimeout(() => {
-        scrollToUserMessage();
+        scrollToBottom();
       }, 50);
+      
       return () => clearTimeout(timeoutId);
     }
-  }, [messages, scrollToUserMessage]);
+  }, [messages, status, scrollToBottom]);
 
-  // ステータス変更時の自動スクロール（ストリーミング開始時など）
+  // ストリーミング完了時：質問メッセージが右上に来るようにスクロール
   useEffect(() => {
-    if (status === 'submitted') {
-      // 送信直後は最下部へ
-      setTimeout(() => scrollToUserMessage(true), 100);
-    } else if (status === 'streaming') {
-      // ストリーミング開始時はユーザーメッセージ位置へ
-      setTimeout(() => scrollToUserMessage(false), 200);
+    if (status === 'ready' && messages.length > 0) {
+      // ストリーミングが完了したら質問メッセージの位置へスクロール
+      const timeoutId = setTimeout(() => {
+        scrollToQuestionMessage();
+      }, 500); // 少し遅らせて最終的なコンテンツが確定してから
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [status, scrollToUserMessage]);
+  }, [status, scrollToQuestionMessage, messages.length]);
 
   // モデル情報の取得
   useEffect(() => {
@@ -418,8 +439,6 @@ export default function Chat() {
           if (form) {
             form.dispatchEvent(submitEvent);
           }
-          // 送信後に自動スクロール（最下部へ）
-          setTimeout(() => scrollToUserMessage(true), 150);
         }, 50);
       }, 100);
       
@@ -912,6 +931,24 @@ export default function Chat() {
                       <div className="whitespace-pre-wrap text-white">{m.content}</div>
                     ) : (
                       <div className={theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}>
+                        {/* Thinking section for gpt-oss models */}
+                        {(m as Message).thinking && isGptOssModel && (
+                          <details className={`mb-4 p-3 rounded-lg border-l-4 ${
+                            theme === 'dark' 
+                              ? 'bg-blue-900 border-blue-600 text-blue-100' 
+                              : 'bg-blue-50 border-blue-400 text-blue-800'
+                          }`}>
+                            <summary className="cursor-pointer font-medium text-sm flex items-center gap-2">
+                              <span>🤔 Thinking Process</span>
+                              <span className="text-xs opacity-70">(クリックして展開)</span>
+                            </summary>
+                            <div className="mt-3 text-sm font-mono whitespace-pre-wrap opacity-80">
+                              {(m as Message).thinking}
+                            </div>
+                          </details>
+                        )}
+                        
+                        {/* Main content */}
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {m.content}
                         </ReactMarkdown>
