@@ -8,7 +8,8 @@ import { useThread } from './contexts/ThreadContext';
 import { useTheme } from './contexts/ThemeContext';
 import { useOllama } from './contexts/OllamaContext';
 import Sidebar from './components/Sidebar';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal } from 'react-icons/hi2';
+import ModelInfoDialog from './components/ModelInfoDialog';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal, HiInformationCircle } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -26,6 +27,7 @@ export default function Chat() {
   const [selectedInitialModel, setSelectedInitialModel] = useState<string>('');
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showParameterSettings, setShowParameterSettings] = useState(false);
+  const [showModelInfo, setShowModelInfo] = useState(false);
   
   // モデル存在確認の状態
   const [currentModelExists, setCurrentModelExists] = useState<boolean | null>(null);
@@ -50,7 +52,9 @@ export default function Chat() {
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const responseStartTimeRef = React.useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const chatAreaRef = useRef<HTMLDivElement>(null);
   const [shouldFocusInput, setShouldFocusInput] = useState(false);
+
 
   const {
     error,
@@ -90,6 +94,56 @@ export default function Chat() {
     },
   });
 
+  // 自動スクロール関数 - ユーザーメッセージが見える位置まで
+  const scrollToUserMessage = useCallback((forceToBottom = false) => {
+    if (!chatAreaRef.current) return;
+
+    // 強制的に最下部へスクロールする場合（メッセージ送信直後など）
+    if (forceToBottom || status === 'submitted') {
+      chatAreaRef.current.scrollTo({
+        top: chatAreaRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      return;
+    }
+
+    // ストリーミング中で、メッセージが存在する場合は最後のユーザーメッセージ位置を維持
+    if (messages.length > 0 && status === 'streaming') {
+      // 最後のユーザーメッセージを探す
+      let lastUserMessageIndex = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          lastUserMessageIndex = i;
+          break;
+        }
+      }
+      
+      if (lastUserMessageIndex >= 0) {
+        // メッセージ要素を取得
+        const messageElements = chatAreaRef.current.querySelectorAll('.message-item');
+        const targetElement = messageElements[lastUserMessageIndex];
+        
+        if (targetElement) {
+          // ユーザーメッセージが上部付近に表示されるようにスクロール
+          const elementTop = (targetElement as HTMLElement).offsetTop;
+          const scrollTop = Math.max(0, elementTop - 80); // 80px余白
+          
+          chatAreaRef.current.scrollTo({
+            top: scrollTop,
+            behavior: 'smooth'
+          });
+          return;
+        }
+      }
+    }
+    
+    // その他の場合：最下部へスクロール
+    chatAreaRef.current.scrollTo({
+      top: chatAreaRef.current.scrollHeight,
+      behavior: 'smooth'
+    });
+  }, [messages, status]);
+
   // カスタムハンドラーでモデルを動的に設定
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -112,6 +166,9 @@ export default function Chat() {
         ollamaUrl: ollamaUrl, // 動的なOllama URL
       },
     });
+
+    // 少し遅らせて自動スクロール（送信直後は最下部へ）
+    setTimeout(() => scrollToUserMessage(true), 100);
   };
 
   // スレッドが変更されたときにメッセージを同期
@@ -195,6 +252,29 @@ export default function Chat() {
       setShouldFocusInput(false);
     }
   }, [input, shouldFocusInput]);
+
+  // メッセージが変更されたときの自動スクロール
+  useEffect(() => {
+    // メッセージが追加されたとき、またはストリーミング中にスクロール
+    if (messages.length > 0) {
+      // 少し遅らせて確実にDOMが更新された後にスクロール
+      const timeoutId = setTimeout(() => {
+        scrollToUserMessage();
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, scrollToUserMessage]);
+
+  // ステータス変更時の自動スクロール（ストリーミング開始時など）
+  useEffect(() => {
+    if (status === 'submitted') {
+      // 送信直後は最下部へ
+      setTimeout(() => scrollToUserMessage(true), 100);
+    } else if (status === 'streaming') {
+      // ストリーミング開始時はユーザーメッセージ位置へ
+      setTimeout(() => scrollToUserMessage(false), 200);
+    }
+  }, [status, scrollToUserMessage]);
 
   // モデル情報の取得
   useEffect(() => {
@@ -338,6 +418,8 @@ export default function Chat() {
           if (form) {
             form.dispatchEvent(submitEvent);
           }
+          // 送信後に自動スクロール（最下部へ）
+          setTimeout(() => scrollToUserMessage(true), 150);
         }, 50);
       }, 100);
       
@@ -627,6 +709,19 @@ export default function Chat() {
               <HiAdjustmentsHorizontal className="w-5 h-5 text-gray-600" />
             </button>
             <button
+              onClick={() => setShowModelInfo(true)}
+              className={`
+                p-2 rounded-md transition-colors
+                ${theme === 'dark' 
+                  ? 'hover:bg-gray-700 text-gray-300 hover:text-gray-100' 
+                  : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
+                }
+              `}
+              title="モデル情報を表示"
+            >
+              <HiInformationCircle className="w-5 h-5" />
+            </button>
+            <button
               onClick={handleClearChat}
               disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
               className="px-2 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
@@ -738,7 +833,7 @@ export default function Chat() {
         )}
 
         {/* チャットエリア */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+        <div ref={chatAreaRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           {/* モデル不存在時の警告バナー */}
           {currentModelExists === false && (
             <div className={`
@@ -801,7 +896,7 @@ export default function Chat() {
             </div>
           ) : (
             messages.map(m => (
-              <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={m.id} className={`message-item flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`
                   max-w-2xl p-4 rounded-lg
                   ${m.role === 'user' 
@@ -970,6 +1065,15 @@ export default function Chat() {
           </form>
         </div>
       </div>
+
+      {/* モデル情報ダイアログ */}
+      {currentThread?.model && (
+        <ModelInfoDialog
+          isOpen={showModelInfo}
+          onClose={() => setShowModelInfo(false)}
+          modelName={currentThread.model}
+        />
+      )}
     </div>
   );
 }
