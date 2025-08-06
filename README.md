@@ -12,6 +12,8 @@ LLMモデル管理、ダーク/ライトテーマ、チャット履歴管理な�
 - 📱 **レスポンシブデザイン**: モバイル・デスクトップ対応
 - 🔄 **リアルタイムストリーミング**: AIからの即座な応答
 - ⚙️ **Ollama サーバー切り替え**: アプリ内で複数のOllamaサーバーを動的に切り替え
+- 🌐 **プロキシ対応**: 企業環境・社内プロキシでの利用をサポート
+- 🔧 **環境変数設定**: .env.local での柔軟な設定管理
 
 ## 必要な環境
 
@@ -52,13 +54,13 @@ docker-compose up -d
 ```
 
 3. アプリケーションにアクセス  
-   ブラウザで `http://localhost:65000` を開いてチャットを開始できます。
+   ブラウザで `http://localhost:65010` を開いてチャットを開始できます。
 
 ## 🎯 アクセス先
 
-- **チャットアプリ**: http://localhost:65000
+- **チャットアプリ**: http://localhost:65010
 - **Ollama API**: http://localhost:65434
-- **モデル管理**: http://localhost:65000/settings
+- **モデル管理**: http://localhost:65010/settings
 
 ### ローカル開発環境でのセットアップ
 
@@ -132,9 +134,9 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 ## ⚙️ 設定
 
 ### ポート設定
-- **Next.jsアプリ**: 65000
+- **Next.jsアプリ**: 65010
 - **Ollama API**: 65434 (外部アクセス) / 11434 (コンテナ内部)
-- **Ollama URL**: `http://ollama:11434` (コンテナ間通信)
+- **Ollama URL**: `http://host.docker.internal:11434` (コンテナから ホストへの通信)
 
 ### Ollamaサーバー設定
 
@@ -151,9 +153,31 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 - **Docker内のOllama**: `http://localhost:11435`
 - **リモートサーバー**: `http://192.168.1.100:11434`
 
-#### 環境変数（非推奨）
-**注意**: 環境変数`OLLAMA_URL`を設定すると、アプリ内の動的サーバー切り替え機能が無効化されます。  
-動的切り替えを使用したい場合は、`.env.local`ファイルを削除するか、`OLLAMA_URL`変数をコメントアウトしてください。
+### 環境変数設定
+
+アプリケーションは環境変数による設定をサポートしています。
+
+#### 設定ファイル
+`.env.local`ファイルを作成して設定を行います（`.env.example`を参照）：
+
+```bash
+# Ollama設定
+OLLAMA_URL=http://localhost:11434
+
+# プロキシ設定（社内プロキシ環境の場合）
+HTTP_PROXY=http://proxy.company.com:8080
+HTTPS_PROXY=http://proxy.company.com:8080
+NO_PROXY=localhost,127.0.0.1,::1,host.docker.internal
+```
+
+#### プロキシ環境での利用
+企業内のプロキシ環境でも利用可能です：
+
+1. **プロキシ設定UI**: アプリケーション内で設定可能
+2. **環境変数**: `.env.local`での設定
+3. **Docker環境**: docker-compose.ymlでプロキシ環境変数を自動継承
+
+**注意**: `OLLAMA_URL`環境変数を設定すると、アプリ内の動的サーバー切り替え機能より優先されます。
 
 ### モデル管理
 アプリケーション内のモデル管理画面（/settings）から以下が可能です：
