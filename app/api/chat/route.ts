@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     messages,
     temperature: temperature,
     maxTokens: maxTokens,
-    async onFinish({ text, toolCalls, toolResults, usage, finishReason }) {
+    async onFinish({ text, toolCalls, toolResults, usage, finishReason }: any) {
       console.log('=== API onFinish ===');
       console.log('Text length:', text?.length);
       console.log('Usage data:', JSON.stringify(usage));

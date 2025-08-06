@@ -1,10 +1,8 @@
 import './globals.css';
-import { Inter } from 'next/font/google';
 import { ThreadProvider } from './contexts/ThreadContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { OllamaProvider } from './contexts/OllamaContext';
-
-const inter = Inter({ subsets: ['latin'] });
+import { ProxyProvider } from './contexts/ProxyContext';
 
 export const metadata = {
   title: 'AI Chat - Ollama チャットアプリ',
@@ -18,13 +16,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className={inter.className}>
+      <body className="font-sans">
         <ThemeProvider>
-          <OllamaProvider>
-            <ThreadProvider>
-              {children}
-            </ThreadProvider>
-          </OllamaProvider>
+          <ProxyProvider>
+            <OllamaProvider>
+              <ThreadProvider>
+                {children}
+              </ThreadProvider>
+            </OllamaProvider>
+          </ProxyProvider>
         </ThemeProvider>
       </body>
     </html>

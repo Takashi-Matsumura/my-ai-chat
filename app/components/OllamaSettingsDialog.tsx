@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useOllama } from '../contexts/OllamaContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { HiXMark, HiCog6Tooth, HiArrowPath, HiExclamationTriangle, HiCheckCircle } from 'react-icons/hi2';
+import { HiXMark, HiCog6Tooth, HiArrowPath, HiExclamationTriangle, HiCheckCircle, HiGlobeAlt } from 'react-icons/hi2';
+import ProxySettingsDialog from './ProxySettingsDialog';
 
 interface OllamaSettingsDialogProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<'none' | 'success' | 'error'>('none');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [showProxySettings, setShowProxySettings] = useState<boolean>(false);
 
   // ダイアログが開かれた時に現在のURLを設定
   useEffect(() => {
@@ -57,19 +59,22 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
     setErrorMessage('');
 
     try {
-      const testUrl = inputUrl.endsWith('/') ? inputUrl.slice(0, -1) : inputUrl;
-      const response = await fetch(`${testUrl}/api/tags`, {
-        method: 'GET',
+      // サーバー経由で接続テストを実行
+      const response = await fetch('/api/ollama/test', {
+        method: 'POST',
         headers: {
-          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ url: inputUrl }),
       });
 
-      if (response.ok) {
+      const data = await response.json();
+
+      if (data.success) {
         setTestResult('success');
       } else {
         setTestResult('error');
-        setErrorMessage(`HTTP ${response.status}: ${response.statusText}`);
+        setErrorMessage(data.error || 'Ollamaサーバーに接続できませんでした');
       }
     } catch (error) {
       setTestResult('error');
@@ -121,6 +126,7 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className={`
         w-full max-w-md rounded-lg shadow-xl
@@ -277,6 +283,21 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
             <div>• カスタムポート: http://localhost:11435</div>
             <div>• リモート: http://192.168.1.100:11434</div>
           </div>
+
+          {/* プロキシ設定ボタン */}
+          <button
+            onClick={() => setShowProxySettings(true)}
+            className={`
+              w-full px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2
+              ${theme === 'dark'
+                ? 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }
+            `}
+          >
+            <HiGlobeAlt className="w-4 h-4" />
+            プロキシ設定
+          </button>
         </div>
 
         {/* フッター */}
@@ -329,5 +350,12 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
         </div>
       </div>
     </div>
+
+    {/* プロキシ設定ダイアログ */}
+    <ProxySettingsDialog
+      isOpen={showProxySettings}
+      onClose={() => setShowProxySettings(false)}
+    />
+    </>
   );
 }

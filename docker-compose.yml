@@ -4,11 +4,14 @@ services:
   nextjs:
     build: .
     ports:
-      - "65000:65000"
+      - "65010:65010"
     environment:
       - NODE_ENV=production
-      - PORT=65000
-      - OLLAMA_URL=http://ollama:11434
+      - PORT=65010
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1,host.docker.internal}
     depends_on:
       - ollama
     restart: unless-stopped

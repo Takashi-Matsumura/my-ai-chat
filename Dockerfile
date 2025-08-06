@@ -9,9 +9,9 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 65000
+EXPOSE 65009
 
-ENV PORT 65000
+ENV PORT 65009
 ENV NODE_ENV production
 
 CMD ["npm", "start"]
