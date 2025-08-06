@@ -10,7 +10,7 @@ import { useTheme } from './contexts/ThemeContext';
 import { useOllama } from './contexts/OllamaContext';
 import Sidebar from './components/Sidebar';
 import ModelInfoDialog from './components/ModelInfoDialog';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal, HiInformationCircle } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal, HiInformationCircle, HiLightBulb } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -65,20 +65,22 @@ export default function Chat() {
   const isGptOssModel = currentThread?.model?.includes('gpt-oss') || false;
   
 
+  const [finishData, setFinishData] = useState<{
+    message: any;
+    usage?: any;
+    finishReason?: string;
+    responseTime: number;
+  } | null>(null);
+
   const standardChatHook = useChat({
     id: currentThread?.id || 'default',
     initialMessages: [],
     api: '/api/chat',
     onFinish(message, { usage, finishReason }) {
-      // メタデータを更新
+      // メタデータ更新をuseEffectで処理するためにstateに保存
       if (currentThread && responseStartTimeRef.current) {
         const responseTime = Date.now() - responseStartTimeRef.current;
-        
-        if (usage && (usage.totalTokens > 0 || usage.promptTokens > 0 || usage.completionTokens > 0)) {
-          updateThreadMetadata(currentThread.id, usage, responseTime, message);
-        } else {
-          updateThreadMetadata(currentThread.id, {}, responseTime, message);
-        }
+        setFinishData({ message, usage, finishReason, responseTime });
         responseStartTimeRef.current = null;
         setResponseStartTime(null);
       }
@@ -96,10 +98,10 @@ export default function Chat() {
   const thinkingChatHook = useThinkingChat({
     api: '/api/chat',
     onFinish(message) {
-      // メタデータを更新（thinking chat用）
+      // メタデータ更新をuseEffectで処理するためにstateに保存（thinking chat用）
       if (currentThread && responseStartTimeRef.current) {
         const responseTime = Date.now() - responseStartTimeRef.current;
-        updateThreadMetadata(currentThread.id, {}, responseTime, message);
+        setFinishData({ message, usage: {}, finishReason: undefined, responseTime });
         responseStartTimeRef.current = null;
         setResponseStartTime(null);
       }
@@ -134,6 +136,17 @@ export default function Chat() {
     element.scrollTo({
       top: element.scrollHeight,
       behavior: 'smooth'
+    });
+  }, []);
+
+  // メッセージ送信時用：中止ボタンまで即座にスクロール
+  const scrollToStopButton = useCallback(() => {
+    if (!chatAreaRef.current) return;
+    
+    const element = chatAreaRef.current;
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: 'auto' // 即座にスクロール
     });
   }, []);
 
@@ -179,6 +192,11 @@ export default function Chat() {
     
     // フォーカス復帰フラグを設定
     setShouldFocusInput(true);
+
+    // 中止ボタンまで即座にスクロール
+    setTimeout(() => {
+      scrollToStopButton();
+    }, 50);
 
     originalHandleSubmit(e, {
       body: {
@@ -248,6 +266,22 @@ export default function Chat() {
       previousMessagesRef.current = [];
     }
   }, [messages, currentThread, updateThreadMessages]);
+
+  // finish データを監視してメタデータを更新
+  useEffect(() => {
+    if (finishData && currentThread) {
+      const { message, usage, finishReason, responseTime } = finishData;
+      
+      if (usage && (usage.totalTokens > 0 || usage.promptTokens > 0 || usage.completionTokens > 0)) {
+        updateThreadMetadata(currentThread.id, usage, responseTime, message);
+      } else {
+        updateThreadMetadata(currentThread.id, {}, responseTime, message);
+      }
+      
+      // 処理完了後にstateをクリア
+      setFinishData(null);
+    }
+  }, [finishData, currentThread, updateThreadMetadata]);
 
   // input値の変化を監視してフォーカスを戻す
   useEffect(() => {
@@ -939,7 +973,8 @@ export default function Chat() {
                               : 'bg-blue-50 border-blue-400 text-blue-800'
                           }`}>
                             <summary className="cursor-pointer font-medium text-sm flex items-center gap-2">
-                              <span>🤔 Thinking Process</span>
+                              <HiLightBulb className="w-4 h-4" />
+                              <span>Thinking Process</span>
                               <span className="text-xs opacity-70">(クリックして展開)</span>
                             </summary>
                             <div className="mt-3 text-sm font-mono whitespace-pre-wrap opacity-80">
@@ -949,7 +984,20 @@ export default function Chat() {
                         )}
                         
                         {/* Main content */}
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({children}) => <h1 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h1>,
+                            h2: ({children}) => <h2 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h2>,
+                            h3: ({children}) => <h3 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h3>,
+                            h4: ({children}) => <h4 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h4>,
+                            h5: ({children}) => <h5 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h5>,
+                            h6: ({children}) => <h6 className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</h6>,
+                            strong: ({children}) => <strong className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</strong>,
+                            th: ({children}) => <th className={theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}>{children}</th>,
+                            td: ({children}) => <td className={theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}>{children}</td>,
+                          }}
+                        >
                           {m.content}
                         </ReactMarkdown>
                       </div>
