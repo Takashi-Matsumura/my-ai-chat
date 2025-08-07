@@ -1144,7 +1144,7 @@ export default function Chat() {
                       ? "モデルを確認中..." 
                       : "メッセージを入力してください（Shift+Enterで送信）..."
                 }
-                onChange={handleInputChange}
+                onChange={(e) => handleInputChange(e as any)}
                 disabled={!canSendMessage}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && e.shiftKey) {
