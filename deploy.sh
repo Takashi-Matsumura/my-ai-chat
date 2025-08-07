@@ -11,9 +11,13 @@ docker-compose down
 echo "🧹 Cleaning up old images..."
 docker-compose down --rmi all --volumes --remove-orphans
 
+# Next.jsキャッシュをクリア
+echo "🧹 Clearing Next.js cache..."
+docker system prune -f
+
 # 新しいイメージをビルド
 echo "🔨 Building new images..."
-docker-compose build --no-cache
+docker-compose build --no-cache --pull
 
 # コンテナを起動
 echo "🎬 Starting containers..."
