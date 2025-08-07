@@ -57,7 +57,7 @@ export default function Chat() {
 
   const [responseStartTime, setResponseStartTime] = useState<number | null>(null);
   const responseStartTimeRef = React.useRef<number | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const [shouldFocusInput, setShouldFocusInput] = useState(false);
 
@@ -575,23 +575,32 @@ export default function Chat() {
               {/* 初期チャット入力フォーム */}
               <form onSubmit={handleInitialSubmit} className="max-w-4xl mx-auto">
                 <div className="flex gap-3">
-                  <input
+                  <textarea
                     className={`
-                      flex-1 p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg
+                      flex-1 p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg resize-none
                       ${theme === 'dark'
                         ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400'
                         : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
                       }
                     `}
+                    rows={initialInput.split('\n').length || 1}
                     value={initialInput}
-                    placeholder="メッセージを入力してください..."
+                    placeholder="メッセージを入力してください（Shift+Enterで送信）..."
                     onChange={(e) => setInitialInput(e.target.value)}
                     disabled={initialInputStatus !== 'ready' || loadingModels}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.shiftKey) {
+                        e.preventDefault();
+                        if (initialInputStatus === 'ready' && initialInput.trim() && !loadingModels) {
+                          handleInitialSubmit(e as any);
+                        }
+                      }
+                    }}
                   />
                   <button
                     type="submit"
                     disabled={initialInputStatus !== 'ready' || !initialInput.trim() || loadingModels}
-                    className="px-8 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 text-lg"
+                    className="px-8 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 text-lg self-end"
                   >
                     {initialInputStatus === 'creating' ? (
                       <>
@@ -1116,31 +1125,40 @@ export default function Chat() {
           )}
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto" data-chat-form>
             <div className="flex gap-3">
-              <input
+              <textarea
                 ref={inputRef}
                 className={`
-                  flex-1 p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                  flex-1 p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none
                   ${theme === 'dark'
                     ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
                     : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
                   }
                   ${!canSendMessage ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
+                rows={input.split('\n').length || 1}
                 value={input}
                 placeholder={
                   currentModelExists === false 
                     ? "モデルが利用できません..." 
                     : checkingModel 
                       ? "モデルを確認中..." 
-                      : "メッセージを入力してください..."
+                      : "メッセージを入力してください（Shift+Enterで送信）..."
                 }
                 onChange={handleInputChange}
                 disabled={!canSendMessage}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && e.shiftKey) {
+                    e.preventDefault();
+                    if (canSendMessage && input.trim() && contextInfo?.warningLevel !== 'danger') {
+                      handleSubmit(e as any);
+                    }
+                  }
+                }}
               />
               <button
                 type="submit"
                 disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger')}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 self-end"
                 title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
               >
                 <HiPaperAirplane className="w-4 h-4" />
