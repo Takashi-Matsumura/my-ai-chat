@@ -1,3 +1,91 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* カスタムローディングアニメーション */
+@keyframes thinking-dots {
+  0%, 60%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  30% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes wave-loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes typing-indicator {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+}
+
+/* カスタムローディングクラス */
+.thinking-dots {
+  animation: thinking-dots 1.5s ease-in-out infinite;
+}
+
+.thinking-dots:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+.wave-loading {
+  animation: wave-loading 2s ease-in-out infinite;
+}
+
+.typing-indicator {
+  animation: typing-indicator 1.4s ease-in-out infinite;
+}
+
+.typing-indicator:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* グラデーションローディング */
+.gradient-loading {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background-size: 200% 100%;
+  animation: wave-loading 1.5s infinite;
+}

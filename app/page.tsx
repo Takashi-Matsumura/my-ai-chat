@@ -1,7 +1,6 @@
 'use client';
 
-import { useChat, Message as BaseMessage } from '@ai-sdk/react';
-import { useThinkingChat } from './hooks/useThinkingChat';
+import { Message as BaseMessage } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -76,72 +75,38 @@ export default function Chat() {
   const [shouldFocusInput, setShouldFocusInput] = useState(false);
   
 
-  // gpt-oss モデルかどうかを判定
-  const isGptOssModel = currentThread?.model?.includes('gpt-oss') || false;
+  // モデル種別に関係なく thinking をサポート
   
 
-  const [finishData, setFinishData] = useState<{
-    message: any;
-    usage?: any;
-    finishReason?: string;
-    responseTime: number;
-  } | null>(null);
+  // 統一送信関数により不要
 
-  const standardChatHook = useChat({
-    id: currentThread?.id || 'default',
-    initialMessages: [],
-    api: '/api/chat',
-    onFinish(message, { usage, finishReason }) {
-      // メタデータ更新をuseEffectで処理するためにstateに保存
-      if (currentThread && responseStartTimeRef.current) {
-        const responseTime = Date.now() - responseStartTimeRef.current;
-        setFinishData({ message, usage, finishReason, responseTime });
-        responseStartTimeRef.current = null;
-        setResponseStartTime(null);
-      }
-    },
-    onError(error) {
-      console.error('Chat error:', error);
-      // エラー時も応答時間をリセット
-      if (responseStartTimeRef.current) {
-        responseStartTimeRef.current = null;
-        setResponseStartTime(null);
-      }
-    },
-  });
+  // 簡素化されたフック使用（状態管理のみ）
 
-  const thinkingChatHook = useThinkingChat({
-    api: '/api/chat',
-    onFinish(message) {
-      // メタデータ更新をuseEffectで処理するためにstateに保存（thinking chat用）
-      if (currentThread && responseStartTimeRef.current) {
-        const responseTime = Date.now() - responseStartTimeRef.current;
-        setFinishData({ message, usage: {}, finishReason: undefined, responseTime });
-        responseStartTimeRef.current = null;
-        setResponseStartTime(null);
-      }
-    },
-    onError(error) {
-      console.error('Thinking chat error:', error);
-      if (responseStartTimeRef.current) {
-        responseStartTimeRef.current = null;
-        setResponseStartTime(null);
-      }
-    },
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [status, setStatus] = useState<'ready' | 'streaming' | 'submitted'>('ready');
+  const [error, setError] = useState<Error | undefined>(undefined);
 
-  // 現在のモデルに応じて適切なフックを選択
-  const {
-    error,
-    input,
-    status,
-    handleInputChange,
-    handleSubmit: originalHandleSubmit,
-    messages,
-    reload,
-    stop,
-    setMessages,
-  } = isGptOssModel ? thinkingChatHook : standardChatHook;
+  // 入力変更ハンドラー
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+  };
+
+  // リロード関数
+  const reload = () => {
+    // 最後のメッセージを再送信
+    if (messages.length > 0) {
+      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+      if (lastUserMessage) {
+        sendMessage(lastUserMessage.content, lastUserMessage.attachments || []);
+      }
+    }
+  };
+
+  // 停止関数（今後実装予定）
+  const stop = () => {
+    setStatus('ready');
+  };
 
   // ストリーミング中用：最下部へスクロール
   const scrollToBottom = useCallback(() => {
@@ -195,35 +160,22 @@ export default function Chat() {
     }
   }, [messages]);
 
-  // カスタムハンドラーでモデルを動的に設定
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  // 通常メッセージ送信ハンドラー（統一版）
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || status !== 'ready') return;
     
-    // 応答時間測定開始
-    const startTime = Date.now();
-    setResponseStartTime(startTime);
-    responseStartTimeRef.current = startTime;
-    
     // フォーカス復帰フラグを設定
     setShouldFocusInput(true);
-
+    
     // 中止ボタンまで即座にスクロール
     setTimeout(() => {
       scrollToStopButton();
     }, 50);
 
-    originalHandleSubmit(e, {
-      body: {
-        model: currentThread?.model || defaultModel,
-        temperature: currentThread?.parameters?.temperature || 0.7,
-        maxTokens: currentThread?.parameters?.maxTokens || 2000,
-        contextWindowSize: currentThread?.parameters?.contextWindowSize,
-        ollamaUrl: ollamaUrl, // 動的なOllama URL
-        attachments: selectedFiles, // 添付ファイルを追加
-      },
-    });
-
+    // 統一送信関数を使用
+    await sendMessage(input, selectedFiles, false);
+    
     // 送信後にファイルリストをクリア
     setSelectedFiles([]);
   };
@@ -291,21 +243,7 @@ export default function Chat() {
     }
   }, [messages, currentThread, updateThreadMessages]);
 
-  // finish データを監視してメタデータを更新
-  useEffect(() => {
-    if (finishData && currentThread) {
-      const { message, usage, finishReason, responseTime } = finishData;
-      
-      if (usage && (usage.totalTokens > 0 || usage.promptTokens > 0 || usage.completionTokens > 0)) {
-        updateThreadMetadata(currentThread.id, usage, responseTime, message);
-      } else {
-        updateThreadMetadata(currentThread.id, {}, responseTime, message);
-      }
-      
-      // 処理完了後にstateをクリア
-      setFinishData(null);
-    }
-  }, [finishData, currentThread, updateThreadMetadata]);
+  // メタデータ更新は sendMessage 内で直接処理
 
   // input値の変化を監視してフォーカスを戻す
   useEffect(() => {
@@ -451,102 +389,93 @@ export default function Chat() {
     }
   };
 
-  // 初期チャット送信ハンドラー（完全修正版）
+  // 初期メッセージ送信ハンドラー（統一版）
   const handleInitialSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!initialInput.trim() || initialInputStatus !== 'ready') return;
     
     setInitialInputStatus('creating');
-    
-    try {
-      // モデルチェックを実行（既に読み込まれていればスキップ）
-      let availableModels = models;
-      if (!availableModels.length) {
-        const queryParams = new URLSearchParams();
-        if (ollamaUrl !== 'http://localhost:11434') {
-          queryParams.append('ollamaUrl', ollamaUrl);
-        }
-        const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (!response.ok || !data.hasModels) {
-          alert('OllamaにLLMモデルがインストールされていません。README.mdの手順に従ってモデルをインストールしてください。');
-          setInitialInputStatus('ready');
-          return;
-        }
-        availableModels = data.models;
-      }
-      
-      // メッセージとモデルを保存
-      const userMessage = initialInput.trim();
-      const modelToUse = selectedInitialModel || availableModels[0]?.name || defaultModel;
-      
-      // メッセージオブジェクトを作成
-      const userMessageObj = {
-        id: Date.now().toString(),
-        role: 'user' as const,
-        content: userMessage,
-      };
-      
-      // 初期メッセージ付きでスレッドを作成
-      const newThreadId = createThreadWithInitialMessage(userMessageObj, modelToUse);
-      
-      // 入力をクリア
-      setInitialInput('');
-      setInitialInputStatus('ready');
-      
-      // 少し待ってから通常のuseChat/useThinkingChatフローを使用
-      setTimeout(() => {
-        (handleInputChange as any)({ target: { value: userMessage } });
-        setTimeout(() => {
-          const submitEvent = new Event('submit', { bubbles: true, cancelable: true }) as any;
-          submitEvent.preventDefault = () => {};
-          handleSubmit(submitEvent);
-        }, 100);
-      }, 200);
-      
-    } catch (error) {
-      console.error('Failed to create initial chat:', error);
-      alert('チャットの作成に失敗しました。再度お試しください。');
-      setInitialInputStatus('ready');
-    }
+    await sendMessage(initialInput, [], true);
   };
 
-  // コンテキスト情報を計算
-  const contextInfo = currentThread ? getContextInfo(messages, currentThread.model) : null;
 
-  // チャット送信が可能かどうかの判定
-  const canSendMessage = currentModelExists === true && status === 'ready' && !checkingModel;
-
-  // 初期メッセージ処理中フラグ
-  const isInitialApiCallRef = useRef(false);
-
-  // 初期メッセージ用の直接API呼び出し
-  const handleDirectApiCall = async (threadId: string, userMessageObj: any, model: string) => {
+  // 🚀 統一メッセージ送信関数
+  const sendMessage = async (content: string, attachments: FileAttachment[] = [], isInitial: boolean = false) => {
     try {
-      // 初期API呼び出し開始フラグを設定
-      isInitialApiCallRef.current = true;
-      // 応答時間測定開始
+      // 1️⃣ バリデーション
+      if (!content.trim()) return;
+      if (!canSendMessage && !isInitial) return;
+      
+      // ステータス設定
+      setStatus('submitted');
+      setError(undefined);
+      
+      // 2️⃣ スレッド管理
+      let thread = currentThread;
+      if (!thread) {
+        // モデルチェック
+        let availableModels = models;
+        if (!availableModels.length) {
+          const queryParams = new URLSearchParams();
+          if (ollamaUrl !== 'http://localhost:11434') {
+            queryParams.append('ollamaUrl', ollamaUrl);
+          }
+          const url = `/api/models${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+          const response = await fetch(url);
+          const data = await response.json();
+          
+          if (!response.ok || !data.hasModels) {
+            alert('OllamaにLLMモデルがインストールされていません。README.mdの手順に従ってモデルをインストールしてください。');
+            return;
+          }
+          availableModels = data.models;
+        }
+        
+        // 新しいスレッド作成
+        const modelToUse = selectedInitialModel || availableModels[0]?.name || defaultModel;
+        const userMessage = {
+          id: Date.now().toString(),
+          role: 'user' as const,
+          content: content.trim(),
+          attachments,
+        };
+        
+        const newThreadId = createThreadWithInitialMessage(userMessage, modelToUse);
+        thread = { id: newThreadId, model: modelToUse, messages: [] };
+      }
+      
+      // 3️⃣ メッセージ準備
+      const userMessage = {
+        id: Date.now().toString(),
+        role: 'user' as const,
+        content: content.trim(),
+        attachments,
+      };
+      
+      // UIに即座に表示
+      const currentMessages = isInitial ? [] : messages;
+      (setMessages as any)([...currentMessages, userMessage]);
+      
+      // 4️⃣ API呼び出し準備
       const startTime = Date.now();
       setResponseStartTime(startTime);
       responseStartTimeRef.current = startTime;
-      setTimeout(() => {
-        (setMessages as any)([userMessageObj]);
-      }, 50);
       
+      // 5️⃣ ストリーミング処理
+      setStatus('streaming');
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: [userMessageObj],
-          model: model,
-          temperature: 0.7,
-          maxTokens: 2000,
+          messages: [...currentMessages, userMessage],
+          model: thread.model || defaultModel,
+          temperature: thread.parameters?.temperature || 0.7,
+          maxTokens: thread.parameters?.maxTokens || 2000,
+          contextWindowSize: thread.parameters?.contextWindowSize,
           ollamaUrl: ollamaUrl,
-          attachments: [],
+          attachments,
         }),
       });
 
@@ -565,7 +494,7 @@ export default function Chat() {
         thinking: undefined as string | undefined,
       };
 
-      // ストリーミングレスポンスを処理
+      // ストリーミングレスポンス処理
       const reader = response.body?.getReader();
       if (reader) {
         try {
@@ -594,8 +523,8 @@ export default function Chat() {
                     assistantMessageObj.content = assistantMessage;
                   }
                   
-                  // UIをリアルタイムで更新
-                  (setMessages as any)([userMessageObj, { ...assistantMessageObj }]);
+                  // リアルタイムUI更新
+                  (setMessages as any)([...currentMessages, userMessage, { ...assistantMessageObj }]);
                 } catch (e) {
                   console.error('JSON parsing failed:', e);
                 }
@@ -607,37 +536,56 @@ export default function Chat() {
         }
       }
 
-      // 最終的なメッセージの内容を更新
+      // 6️⃣ 完了処理
       assistantMessageObj.content = assistantMessage;
       assistantMessageObj.thinking = thinking || undefined;
 
-      // スレッドに両方のメッセージを更新
-      updateThreadMessages(threadId, [userMessageObj, assistantMessageObj]);
-      
-      // UIにも最終状態を反映（確実に表示されるよう少し遅延）
-      setTimeout(() => {
-        (setMessages as any)([userMessageObj, assistantMessageObj]);
-      }, 100);
+      const finalMessages = [...currentMessages, userMessage, assistantMessageObj];
+      updateThreadMessages(thread.id, finalMessages);
+      (setMessages as any)(finalMessages);
 
-      // 応答時間を記録
+      // メタデータ更新
       if (responseStartTimeRef.current) {
         const responseTime = Date.now() - responseStartTimeRef.current;
-        updateThreadMetadata(threadId, {}, responseTime, assistantMessageObj);
+        updateThreadMetadata(thread.id, {}, responseTime, assistantMessageObj);
         responseStartTimeRef.current = null;
         setResponseStartTime(null);
       }
       
-      // 初期API呼び出し完了フラグをクリア
-      isInitialApiCallRef.current = false;
+      // 入力クリア
+      if (isInitial) {
+        setInitialInput('');
+        setInitialInputStatus('ready');
+      } else {
+        setInput('');
+      }
+      
+      // ステータス復帰
+      setStatus('ready');
       
     } catch (error) {
-      console.error('Direct API call error:', error);
-      // エラー時はユーザーメッセージのみ表示
-      (setMessages as any)([userMessageObj]);
-      // 初期API呼び出し完了フラグをクリア
-      isInitialApiCallRef.current = false;
+      // 7️⃣ エラーハンドリング
+      console.error('Send message error:', error);
+      setError(error as Error);
+      setStatus('ready');
+      
+      if (responseStartTimeRef.current) {
+        responseStartTimeRef.current = null;
+        setResponseStartTime(null);
+      }
+      if (isInitial) {
+        setInitialInputStatus('ready');
+      }
     }
   };
+
+  // コンテキスト情報を計算
+  const contextInfo = currentThread ? getContextInfo(messages, currentThread.model) : null;
+
+  // チャット送信が可能かどうかの判定
+  const canSendMessage = currentModelExists === true && status === 'ready' && !checkingModel;
+
+
 
 
   // ファイル処理のヘルパー関数
@@ -816,8 +764,20 @@ export default function Chat() {
                   >
                     {initialInputStatus === 'creating' ? (
                       <>
-                        <AiOutlineLoading3Quarters className="animate-spin w-5 h-5" />
-                        作成中...
+                        <div className="relative">
+                          <AiOutlineLoading3Quarters className="animate-spin w-5 h-5" />
+                          <div className="absolute inset-0 animate-ping">
+                            <div className="w-5 h-5 bg-white rounded-full opacity-20"></div>
+                          </div>
+                        </div>
+                        <span className="flex items-center gap-2">
+                          チャット作成中
+                          <div className="flex space-x-1">
+                            <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                            <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                            <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                          </div>
+                        </span>
                       </>
                     ) : (
                       <>
@@ -1237,8 +1197,8 @@ export default function Chat() {
                       </div>
                     ) : (
                       <div className={theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}>
-                        {/* Thinking section for gpt-oss models */}
-                        {(m as Message).thinking && isGptOssModel && (
+                        {/* Thinking section for all models */}
+                        {(m as Message).thinking && (
                           <details className={`mb-4 p-3 rounded-lg border-l-4 ${
                             theme === 'dark' 
                               ? 'bg-blue-900 border-blue-600 text-blue-100' 
@@ -1290,22 +1250,69 @@ export default function Chat() {
                 }
               `}>
                 <div className={`
-                  flex items-center gap-2
+                  flex items-center justify-between
                   ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}
                 `}>
-                  {status === 'submitted' && (
-                    <>
-                      <AiOutlineLoading3Quarters className="animate-spin w-4 h-4 text-blue-500" />
-                      <span>考え中...</span>
-                    </>
-                  )}
+                  <div className="flex items-center gap-6">
+                    {status === 'submitted' && (
+                      <>
+                        {/* パルスアニメーション付きのアイコン */}
+                        <div className="relative">
+                          <AiOutlineLoading3Quarters className="animate-spin w-5 h-5 text-blue-500" />
+                          <div className="absolute inset-0 animate-ping">
+                            <div className="w-5 h-5 bg-blue-400 rounded-full opacity-25"></div>
+                          </div>
+                        </div>
+                        
+                        {/* タイピング風アニメーション */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">AIが考え中</span>
+                            <div className="flex space-x-1">
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full thinking-dots"></div>
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full thinking-dots"></div>
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full thinking-dots"></div>
+                            </div>
+                          </div>
+                          <div className="text-xs opacity-75 mt-1 relative overflow-hidden">
+                            <div className="gradient-loading absolute inset-0"></div>
+                            最適な回答を準備しています
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    
+                    {status === 'streaming' && (
+                      <>
+                        {/* ストリーミング中のアニメーション */}
+                        <div className="flex items-center gap-3">
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full typing-indicator"></div>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full typing-indicator"></div>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full typing-indicator"></div>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-purple-500 font-medium">回答中...</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* 停止ボタン */}
                   <button
                     type="button"
-                    className="ml-auto px-3 py-1 text-xs text-blue-500 border border-blue-500 rounded hover:bg-blue-50 transition-colors flex items-center gap-1"
+                    className={`
+                      p-2 border rounded-full transition-all duration-200 flex items-center justify-center
+                      ${theme === 'dark'
+                        ? 'text-red-400 border-red-500 hover:bg-red-900/20'
+                        : 'text-red-600 border-red-300 hover:bg-red-50'
+                      }
+                    `}
                     onClick={stop}
+                    title="生成を停止"
                   >
-                    <HiStop className="w-3 h-3" />
-                    停止
+                    <HiStop className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -1470,7 +1477,36 @@ export default function Chat() {
                 </div>
               )}
 
-              <div className="flex gap-3">
+              <div className="flex items-start gap-3 justify-center">
+                {/* ファイル添付ボタン（左側） */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.gif,.webp"
+                  onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!canSendMessage}
+                  className={`
+                    w-12 h-12 rounded-full transition-all duration-200 flex items-center justify-center flex-shrink-0
+                    ${theme === 'dark'
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
+                    } 
+                    disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-md
+                  `}
+                  title="ファイルを添付"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </button>
+
+                {/* テキストエリア（中央） */}
                 <div className="flex-1">
                   <textarea
                     ref={inputRef}
@@ -1504,40 +1540,37 @@ export default function Chat() {
                   />
                 </div>
 
-                {/* ファイル添付ボタンと送信ボタン */}
-                <div className="flex flex-col gap-2 self-end">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.gif,.webp"
-                    onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!canSendMessage}
-                    className={`px-3 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
-                      theme === 'dark'
-                        ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    title="ファイルを添付"
-                  >
-                    <HiPaperClip className="w-4 h-4" />
-                  </button>
-                  
-                  <button
-                    type="submit"
-                    disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger')}
-                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-                    title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
-                  >
-                    <HiPaperAirplane className="w-4 h-4" />
-                    送信
-                  </button>
-                </div>
+                {/* 送信ボタン（右側） */}
+                <button
+                  type="submit"
+                  disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger') || status !== 'ready'}
+                  className="px-6 py-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 flex-shrink-0"
+                  title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
+                >
+                  {(status === 'submitted' || status === 'streaming') ? (
+                    <>
+                      <div className="relative">
+                        <AiOutlineLoading3Quarters className="animate-spin w-4 h-4" />
+                        <div className="absolute inset-0 animate-ping">
+                          <div className="w-4 h-4 bg-white rounded-full opacity-20"></div>
+                        </div>
+                      </div>
+                      <span className="flex items-center gap-2">
+                        {status === 'submitted' ? '処理中' : '送信中'}
+                        <div className="flex space-x-1">
+                          <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                          <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                          <div className="w-1 h-1 bg-white rounded-full thinking-dots"></div>
+                        </div>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <HiPaperAirplane className="w-4 h-4" />
+                      送信
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </form>
