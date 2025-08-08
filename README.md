@@ -16,6 +16,9 @@ LLMモデル管理、ダーク/ライトテーマ、チャット履歴管理な�
 - 🌐 **プロキシ対応**: 企業環境・社内プロキシでの利用をサポート
 - 🔧 **環境変数設定**: .env.local での柔軟な設定管理
 - 📄 **データのインポート/エクスポート**: チャット履歴のバックアップと復元
+- 📂 **ファイル添付対応**: 画像・テキストファイルのアップロードと分析
+- 🎨 **ローディングアニメーション**: 美しい応答待機中の視覚的フィードバック
+- ⚙️ **簡単設定アクセス**: ヘッダーの設定ボタンでワンクリックアクセス
 
 ## 必要な環境
 
@@ -68,15 +71,17 @@ docker-compose up -d
 新規ユーザーは初回アクセス時に以下の設定が必要です：
 
 ### 1. Ollamaサーバー設定
-1. 右上の歯車アイコン → 「サーバー設定」をクリック
-2. Ollama サーバー URL を設定:
+1. チャット画面右上の⚙️設定ボタンをクリック
+2. 設定画面で「サーバー設定」をクリック
+3. Ollama サーバー URL を設定:
    - **ローカル環境**: `http://localhost:11434`
    - **リモートサーバー**: `http://[IPアドレス]:11434`
-3. 「接続テスト」で動作確認後、「保存」
+4. 「接続テスト」で動作確認後、「保存」
 
 ### 2. プロキシ設定 (社内環境の場合)
-1. 右上の歯車アイコン → 「プロキシ設定」をクリック
-2. プロキシサーバー情報を入力:
+1. チャット画面右上の⚙️設定ボタンをクリック
+2. 設定画面で「プロキシ設定」をクリック
+3. プロキシサーバー情報を入力:
    ```
    HTTPプロキシ: http://proxy.company.com:8080
    HTTPSプロキシ: http://proxy.company.com:8080
@@ -139,21 +144,33 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 ## アーキテクチャ
 
 ### コア構造
-- **フロントエンド**: React + AI SDK (`@ai-sdk/react`) の`useChat`フックでストリーミングチャットインターフェース
-- **バックエンド**: Next.js API Route (`/api/chat`) でローカルOllamaからのストリーミング応答を処理
-- **スタイリング**: Tailwind CSS（最小限のカスタムスタイリング）
-- **AI統合**: Ollama（`http://localhost:11434/v1`）に接続する`@ai-sdk/openai`を使用
+- **フロントエンド**: React with AI SDK hooks (`@ai-sdk/react`) でストリーミングチャットインターフェース
+- **バックエンド**: Next.js API route (`/api/chat`) でOllamaからのストリーミング応答処理
+- **スタイリング**: Tailwind CSS with custom animations
+- **AI統合**: `@ai-sdk/openai` でOllama (`http://localhost:11434/v1`) に接続
+- **Thinking支援**: gpt-ossモデルの思考プロセス可視化対応
+- **データ保存**: localStorage での完全クライアントサイド保存
+- **Proxy支援**: 企業環境対応のサーバーサイドプロキシ処理
+- **環境検知**: Docker/開発環境の自動切り替え
 
 ### 重要なファイル
-- `app/page.tsx` - `useChat`フックを使用するメインチャットインターフェース
-- `app/api/chat/route.ts` - OllamaへのリクエストをプロキシするAPIエンドポイント
-- `app/layout.tsx` - Interフォントとメタデータを含むルートレイアウト
+- `app/page.tsx` - 統一された `sendMessage` 関数でのメインチャットインターフェース
+- `app/api/chat/route.ts` - モデル対応型カスタムストリーミング処理
+- `app/utils/modelUtils.ts` - Thinking/標準モデルの判定ロジック
+- `app/utils/environment.ts` - 環境に応じたOllama URL自動切り替え
+- `app/contexts/ThreadContext.tsx` - チャットスレッドとlocalStorage管理
+- `app/contexts/OllamaContext.tsx` - Ollamaサーバー管理と動的切り替え
+- `app/contexts/ProxyContext.tsx` - プロキシ設定管理
+- `app/components/ModelManager.tsx` - LLMモデルのインストール・削除管理
+- `app/globals.css` - カスタムCSS animations (thinking-dots, pulse-glow等)
 
 ### チャットフロー
-1. フロントエンドの`useChat`フックでユーザー入力を処理
-2. `/api/chat`エンドポイントにメッセージを送信
-3. バックエンドが`streamText`を使用してOllamaからの応答をストリーミング
-4. フロントエンドがローディング状態とエラーハンドリングでストリーミング応答を表示
+1. フロントエンドの統一された `sendMessage` 関数でユーザー入力を処理
+2. モデル種別に応じて適切なストリーミングフックを使用
+3. `/api/chat` エンドポイントでモデル対応型の処理を実行
+4. gpt-ossモデル: thinking -> content の2段階ストリーミング
+5. 標準モデル: 直接contentストリーミング
+6. フロントエンドで美しいローディングアニメーションと適切な応答表示
 
 ## ⚙️ 設定
 
@@ -167,10 +184,11 @@ docker exec my-ai-chat-ollama-1 ollama rm <model>  # モデル削除
 #### 動的サーバー切り替え機能
 アプリケーション内で複数のOllamaサーバーを動的に切り替えることができます。
 
-- **設定場所**: モデル管理画面（/settings）の「サーバー設定」ボタン
-- **デフォルト**: `http://host.docker.internal:11434`
+- **設定場所**: チャット画面右上の⚙️設定ボタン → 「サーバー設定」
+- **環境自動検知**: Docker環境では `http://host.docker.internal:11434`、開発環境では `http://localhost:11434` を自動選択
 - **設定保存**: ブラウザのlocalStorageに永続化
 - **接続テスト**: 設定前にサーバーの動作確認が可能
+- **リアルタイム切り替え**: アプリ再起動不要でサーバー変更が可能
 
 #### 使用例
 - **ローカルOllama**: `http://localhost:11434`
@@ -204,10 +222,12 @@ NO_PROXY=localhost,127.0.0.1,::1,host.docker.internal
 **注意**: `OLLAMA_URL`環境変数を設定すると、アプリ内の動的サーバー切り替え機能より優先されます。
 
 ### モデル管理
-アプリケーション内のモデル管理画面（/settings）から以下が可能です：
+チャット画面右上の⚙️設定ボタンからモデル管理画面（/settings）にアクセスし、以下が可能です：
 - 🔽 **ダウンロード**: 15以上のモデルから選択
 - 📦 **インストール**: バックグラウンド処理で通知付き
 - 🗑️ **アンインストール**: 不要なモデルの削除
+- 📊 **モデル情報**: 詳細メタデータとパフォーマンス情報の表示
+- ⚡ **チャット内選択**: ヘッダーのドロップダウンで即座にモデル変更可能
 
 ### 推奨モデル
 - **軽量**: `gemma2:2b` (1.5GB)

@@ -1017,7 +1017,13 @@ export default function Chat() {
             <button
               onClick={handleClearChat}
               disabled={messages.length === 0 || status === 'streaming' || status === 'submitted'}
-              className="px-2 py-1.5 text-xs font-medium text-red-600 border border-red-300 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+              className={`
+                px-2 py-1.5 text-xs font-medium border rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1
+                ${theme === 'dark'
+                  ? 'text-red-400 border-gray-600 bg-gray-700 hover:bg-gray-600'
+                  : 'text-red-600 border-red-300 hover:bg-red-50'
+                }
+              `}
               title="チャット履歴をクリア"
             >
               <HiTrash className="w-3 h-3" />

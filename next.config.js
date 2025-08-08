@@ -4,28 +4,28 @@ const nextConfig = {
   async headers() {
     return [
       {
-        source: '/(.*)',
+        source: "/(.*)",
         headers: [
           {
-            key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate, max-age=0'
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate, max-age=0",
           },
           {
-            key: 'Pragma',
-            value: 'no-cache'
+            key: "Pragma",
+            value: "no-cache",
           },
           {
-            key: 'Expires',
-            value: '0'
+            key: "Expires",
+            value: "0",
           },
           {
-            key: 'X-Cache-Bust',
-            value: Date.now().toString()
-          }
-        ]
-      }
-    ]
-  }
-}
+            key: "X-Cache-Bust",
+            value: Date.now().toString(),
+          },
+        ],
+      },
+    ];
+  },
+};
 
 module.exports = nextConfig;

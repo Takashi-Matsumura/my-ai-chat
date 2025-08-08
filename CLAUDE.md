@@ -21,28 +21,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a Next.js 14+ chat application using the AI SDK to interface with Ollama (local LLM server). The architecture follows Next.js App Router patterns:
 
 ### Core Structure
-- **Frontend**: React with AI SDK hooks (`@ai-sdk/react`) for streaming chat interface
-- **Backend**: Next.js API route (`/api/chat`) handling streaming responses from local Ollama
-- **Styling**: Tailwind CSS with minimal custom styling
+- **Frontend**: React with unified `sendMessage` function for streaming chat interface
+- **Backend**: Next.js API route (`/api/chat`) with model-aware custom streaming for all models
+- **Styling**: Tailwind CSS with custom CSS animations (thinking-dots, pulse-glow, wave-loading)
 - **AI Integration**: Uses `@ai-sdk/openai` configured to connect to Ollama
+- **Model Detection**: `isThinkingModel()` utility for proper model-specific processing
 - **Thinking Support**: Custom streaming implementation for gpt-oss models with thinking process visualization
+- **File Attachment Support**: Image and text file upload with Base64 encoding and analysis
 - **Proxy Support**: Server-side proxy handling for corporate environments
-- **Environment Configuration**: Environment variable support via `.env.local`
+- **Environment Detection**: Automatic Docker/development environment switching
+- **Loading Animations**: Beautiful visual feedback during response generation
+- **Settings Access**: Header settings button for easy access to configuration
 - **Data Storage**: Client-side localStorage for all settings and chat data
 
 ### Key Files
-- `app/page.tsx` - Main chat interface using `useChat` hook with dual support for standard and thinking models
-- `app/api/chat/route.ts` - API endpoint that proxies requests to Ollama with thinking support for gpt-oss models
-- `app/hooks/useThinkingChat.ts` - Custom chat hook for models with thinking process support
+- `app/page.tsx` - Main chat interface with unified `sendMessage` function and model-aware streaming
+- `app/api/chat/route.ts` - API endpoint with custom streaming for all models (thinking vs standard)
+- `app/utils/modelUtils.ts` - Model detection utility (`isThinkingModel()`) for proper processing
+- `app/utils/environment.ts` - Environment detection and automatic Ollama URL switching
 - `app/components/ModelInfoDialog.tsx` - Model metadata and technical specifications display
 - `app/api/ollama/models/[modelName]/route.ts` - API endpoint for fetching detailed model information
 - `app/layout.tsx` - Root layout with system fonts and metadata
 - `app/contexts/OllamaContext.tsx` - Ollama server management and dynamic switching
 - `app/contexts/ProxyContext.tsx` - Proxy settings management
 - `app/contexts/ThreadContext.tsx` - Chat thread management with localStorage persistence
+- `app/components/ModelManager.tsx` - LLM model installation/removal management (simplified)
 - `app/components/OllamaSettingsDialog.tsx` - Ollama server configuration UI
 - `app/components/ProxySettingsDialog.tsx` - Proxy configuration UI
 - `app/api/ollama/test/route.ts` - Server-side Ollama connection testing
+- `app/globals.css` - Custom CSS animations (thinking-dots, pulse-glow, wave-loading, typing-indicator)
 
 ### Dependencies
 - AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`) for LLM integration
@@ -83,16 +90,33 @@ PORT=3000
 - **Privacy**: Each user's settings are isolated and private to their browser
 
 ### Chat Flow
-1. User input handled by `useChat` hook (standard models) or `useThinkingChat` hook (gpt-oss models) in frontend
-2. Messages sent to `/api/chat` endpoint with model-specific routing
-3. For gpt-oss models: Custom streaming implementation fetches thinking process first, then streams content
-4. For standard models: Backend streams response from Ollama using `streamText` with configurable Ollama URL
-5. Frontend displays streaming response with loading states, error handling, and thinking process visualization
-6. Server-side connection testing available via `/api/ollama/test` to bypass CORS issues
+1. User input handled by unified `sendMessage` function with model-aware processing
+2. Model type detection using `isThinkingModel(modelName)` utility function
+3. Messages sent to `/api/chat` endpoint with custom streaming for all models
+4. **gpt-oss models**: Two-phase streaming (thinking -> content) with type-specific data format
+5. **Standard models**: Direct content streaming with simplified data format
+6. Frontend processes streaming data based on model type:
+   - Thinking models: Display thinking section + content with special UI
+   - Standard models: Display content directly with loading animations
+7. Beautiful loading animations during response generation (purple theme)
+8. File attachments processed and included in message context
+9. Server-side connection testing available via `/api/ollama/test` to bypass CORS issues
+10. Environment-aware Ollama URL selection (Docker vs development)
 
 ### Initial User Setup
-New users must configure two settings on first access:
+New users can access settings via the header settings button (⚙️) and configure:
 1. **Ollama Server URL**: Configure connection to local or remote Ollama server
+   - Environment auto-detection: Docker (`host.docker.internal:11434`) vs Development (`localhost:11434`)
+   - Real-time server switching without app restart
 2. **Proxy Settings**: Configure corporate proxy if in enterprise environment
+3. **Model Management**: Install/uninstall LLM models directly from the application
+4. **Model Selection**: Header dropdown for quick model switching during chat
 
 All settings are stored in browser localStorage and must be configured per user/browser.
+
+### Model-Aware Processing
+**Critical Implementation**: The application uses `isThinkingModel()` function to distinguish between:
+- **gpt-oss models**: Support thinking process visualization with two-phase streaming
+- **Standard models**: Direct content display without thinking sections
+
+This ensures proper display for all model types (gemma2, mistral, llama, etc.) without processing conflicts.
