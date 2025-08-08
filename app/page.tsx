@@ -1351,7 +1351,7 @@ export default function Chat() {
                             <div className="w-2 h-2 bg-purple-500 rounded-full typing-indicator"></div>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-purple-500 font-medium">回答中...</span>
+                            <span className="text-purple-500 font-medium">回答中　</span>
                           </div>
                         </div>
                       </>
