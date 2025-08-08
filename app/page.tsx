@@ -755,6 +755,21 @@ export default function Chat() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* 設定ボタン */}
+              <a
+                href="/settings"
+                className={`
+                  p-2 rounded-md transition-colors
+                  ${theme === 'dark' 
+                    ? 'hover:bg-gray-700 text-gray-300 hover:text-white' 
+                    : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
+                  }
+                `}
+                title="LLMモデル管理・サーバー設定"
+              >
+                <HiCog6Tooth className="w-5 h-5" />
+              </a>
+              
               <button
                 onClick={toggleTheme}
                 className={`
