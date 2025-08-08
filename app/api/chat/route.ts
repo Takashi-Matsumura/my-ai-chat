@@ -4,9 +4,51 @@ import { streamText } from "ai";
 // Allow streaming responses up to 30 seconds
 export const maxDuration = 30;
 
+// Helper function to process file attachments for Ollama
+function processAttachmentsForOllama(attachments: any[]): string {
+  if (!attachments || attachments.length === 0) return '';
+  
+  let attachmentText = '\n\n--- 添付ファイル ---\n';
+  
+  attachments.forEach((file, index) => {
+    attachmentText += `\n${index + 1}. ファイル名: ${file.name}\n`;
+    attachmentText += `   ファイルサイズ: ${(file.size / 1024).toFixed(1)} KB\n`;
+    attachmentText += `   ファイル形式: ${file.type}\n`;
+    
+    if (file.type.startsWith('image/')) {
+      // 画像ファイルの場合、Base64データを含める
+      attachmentText += `   画像データ: ${file.data}\n`;
+      attachmentText += `   ※この画像の内容を分析して回答に含めてください。\n`;
+    } else if (file.type === 'text/plain' || file.type === 'text/markdown') {
+      // テキストファイルの場合、内容を抽出して含める
+      try {
+        const base64Content = file.data.split(',')[1];
+        const textContent = Buffer.from(base64Content, 'base64').toString('utf-8');
+        attachmentText += `   内容:\n${textContent}\n`;
+      } catch (error) {
+        attachmentText += `   ※テキスト内容の抽出に失敗しました\n`;
+      }
+    } else {
+      attachmentText += `   ※このファイル形式は内容表示に対応していません\n`;
+    }
+    attachmentText += '\n';
+  });
+  
+  return attachmentText;
+}
+
 // Custom streaming response with thinking support
 async function streamOllamaWithThinking(options: any) {
-  const { baseUrl, model, messages, temperature, maxTokens } = options;
+  const { baseUrl, model, messages, temperature, maxTokens, attachments } = options;
+  
+  // 添付ファイルがある場合はメッセージに追加
+  const processedMessages = [...messages];
+  if (attachments && attachments.length > 0 && processedMessages.length > 0) {
+    const lastMessage = processedMessages[processedMessages.length - 1];
+    if (lastMessage.role === 'user') {
+      lastMessage.content += processAttachmentsForOllama(attachments);
+    }
+  }
   
   // まずは非ストリーミングでthinkingデータを取得
   try {
@@ -17,7 +59,7 @@ async function streamOllamaWithThinking(options: any) {
       },
       body: JSON.stringify({
         model: model,
-        messages: messages,
+        messages: processedMessages,
         stream: false,
         options: {
           temperature: temperature,
@@ -51,7 +93,7 @@ async function streamOllamaWithThinking(options: any) {
             },
             body: JSON.stringify({
               model: model,
-              messages: messages,
+              messages: processedMessages,
               stream: true,
               options: {
                 temperature: temperature,
@@ -142,7 +184,8 @@ export async function POST(req: Request) {
     temperature = 0.7,
     maxTokens = 2000,
     contextWindowSize,
-    ollamaUrl // フロントエンドから送信されるOllama URL
+    ollamaUrl, // フロントエンドから送信されるOllama URL
+    attachments // 添付ファイルデータ
   } = await req.json();
 
   // Ollama URLを決定（優先順位: リクエスト > 環境変数 > デフォルト）
@@ -163,13 +206,23 @@ export async function POST(req: Request) {
       messages,
       temperature,
       maxTokens: contextWindowSize && contextWindowSize > 0 ? Math.min(contextWindowSize, maxTokens) : maxTokens,
+      attachments,
     });
+  }
+
+  // 添付ファイルがある場合はメッセージに追加
+  const processedMessages = [...messages];
+  if (attachments && attachments.length > 0 && processedMessages.length > 0) {
+    const lastMessage = processedMessages[processedMessages.length - 1];
+    if (lastMessage.role === 'user') {
+      lastMessage.content += processAttachmentsForOllama(attachments);
+    }
   }
 
   // Ollamaのパラメータ設定
   const streamOptions: any = {
     model: openai(model),
-    messages,
+    messages: processedMessages,
     temperature: temperature,
     maxTokens: maxTokens,
     async onFinish({ text, toolCalls, toolResults, usage, finishReason }: any) {

@@ -1,11 +1,12 @@
 export async function GET(request: Request) {
+  // URLからクエリパラメータを取得
+  const { searchParams } = new URL(request.url);
+  const customOllamaUrl = searchParams.get('ollamaUrl');
+  
+  // Ollama URLを決定（優先順位: クエリパラメータ > 環境変数 > デフォルト）
+  const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
+  
   try {
-    // URLからクエリパラメータを取得
-    const { searchParams } = new URL(request.url);
-    const customOllamaUrl = searchParams.get('ollamaUrl');
-    
-    // Ollama URLを決定（優先順位: クエリパラメータ > 環境変数 > デフォルト）
-    const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
     const response = await fetch(`${ollamaUrl}/api/tags`);
     
     if (!response.ok) {
@@ -31,14 +32,31 @@ export async function GET(request: Request) {
     
     // Ollamaサーバーに接続できない、またはモデルがない場合
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isConnectionError = errorMessage.includes('fetch') || errorMessage.includes('ECONNREFUSED');
+    const isConnectionError = errorMessage.includes('fetch') || 
+                             errorMessage.includes('ECONNREFUSED') || 
+                             errorMessage.includes('ENOTFOUND') ||
+                             errorMessage.includes('ENETUNREACH');
+    
+    // より詳細な診断情報を提供
+    let diagnosisMessage = '';
+    if (errorMessage.includes('ENOTFOUND')) {
+      diagnosisMessage = 'ホスト名が見つかりません。Ollama URLの設定を確認してください。';
+    } else if (errorMessage.includes('ECONNREFUSED')) {
+      diagnosisMessage = 'Ollamaサーバーが起動していない可能性があります。';
+    } else if (errorMessage.includes('ENETUNREACH')) {
+      diagnosisMessage = 'ネットワークに到達できません。プロキシ設定を確認してください。';
+    } else if (isConnectionError) {
+      diagnosisMessage = 'Ollamaサーバーへの接続に失敗しました。';
+    }
     
     return Response.json(
       { 
         error: errorMessage,
+        diagnosis: diagnosisMessage,
         models: [],
         hasModels: false,
-        ollamaConnected: !isConnectionError
+        ollamaConnected: !isConnectionError,
+        ollamaUrl: customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434'
       },
       { status: isConnectionError ? 503 : 500 }
     );

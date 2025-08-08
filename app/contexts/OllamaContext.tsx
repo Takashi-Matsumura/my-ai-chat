@@ -11,7 +11,7 @@ interface OllamaContextType {
 
 const OllamaContext = createContext<OllamaContextType | undefined>(undefined);
 
-const DEFAULT_OLLAMA_URL = 'http://host.docker.internal:11434';
+const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 const STORAGE_KEY = 'ollama-url';
 
 export function OllamaProvider({ children }: { children: ReactNode }) {

@@ -2,11 +2,19 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 
+interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
+  data: string; // Base64 encoded data
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   thinking?: string;
+  attachments?: FileAttachment[];
 }
 
 interface UseThinkingChatOptions {

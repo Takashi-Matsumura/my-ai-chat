@@ -10,7 +10,7 @@ import { useTheme } from './contexts/ThemeContext';
 import { useOllama } from './contexts/OllamaContext';
 import Sidebar from './components/Sidebar';
 import ModelInfoDialog from './components/ModelInfoDialog';
-import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal, HiInformationCircle, HiLightBulb } from 'react-icons/hi2';
+import { HiChatBubbleLeftRight, HiPaperAirplane, HiTrash, HiArrowPath, HiStop, HiBars3, HiXMark, HiExclamationTriangle, HiCog6Tooth, HiChevronUp, HiChevronDown, HiSun, HiMoon, HiArrowDownTray, HiCheckCircle, HiAdjustmentsHorizontal, HiInformationCircle, HiLightBulb, HiPaperClip, HiPhoto, HiDocument } from 'react-icons/hi2';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface OllamaModel {
@@ -19,9 +19,17 @@ interface OllamaModel {
   modified_at: string;
 }
 
-// Extended message type for thinking support
+// Extended message type for thinking support and file attachments
+interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
+  data: string; // Base64 encoded data
+}
+
 interface Message extends BaseMessage {
   thinking?: string;
+  attachments?: FileAttachment[];
 }
 
 export default function Chat() {
@@ -34,6 +42,10 @@ export default function Chat() {
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [showParameterSettings, setShowParameterSettings] = useState(false);
   const [showModelInfo, setShowModelInfo] = useState(false);
+  
+  // ファイルアップロード関連のstate
+  const [selectedFiles, setSelectedFiles] = useState<FileAttachment[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
   
   // モデル存在確認の状態
   const [currentModelExists, setCurrentModelExists] = useState<boolean | null>(null);
@@ -48,6 +60,7 @@ export default function Chat() {
     defaultModel,
     setDefaultModel,
     createThread,
+    createThreadWithInitialMessage,
     closeCurrentThread,
     getContextInfo
   } = useThread();
@@ -59,7 +72,9 @@ export default function Chat() {
   const responseStartTimeRef = React.useRef<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [shouldFocusInput, setShouldFocusInput] = useState(false);
+  
 
   // gpt-oss モデルかどうかを判定
   const isGptOssModel = currentThread?.model?.includes('gpt-oss') || false;
@@ -205,9 +220,14 @@ export default function Chat() {
         maxTokens: currentThread?.parameters?.maxTokens || 2000,
         contextWindowSize: currentThread?.parameters?.contextWindowSize,
         ollamaUrl: ollamaUrl, // 動的なOllama URL
+        attachments: selectedFiles, // 添付ファイルを追加
       },
     });
+
+    // 送信後にファイルリストをクリア
+    setSelectedFiles([]);
   };
+
 
   // スレッドが変更されたときにメッセージを同期
   const previousThreadId = React.useRef<string | null>(null);
@@ -218,8 +238,12 @@ export default function Chat() {
     
     // 新しいスレッドのメッセージを読み込み
     if (currentThread) {
-      (setMessages as any)(currentThread.messages || []);
-      previousMessagesRef.current = currentThread.messages || [];
+      // スレッドIDが実際に変更された場合のみ処理
+      if (previousThreadId.current !== currentThread.id) {
+        // 常にスレッドのメッセージを読み込み（初期API処理との競合を解消）
+        (setMessages as any)(currentThread.messages || []);
+        previousMessagesRef.current = currentThread.messages || [];
+      }
     } else {
       (setMessages as any)([]);
       previousMessagesRef.current = [];
@@ -227,7 +251,7 @@ export default function Chat() {
     
     // 現在のスレッドIDを記録
     previousThreadId.current = currentThread?.id || null;
-  }, [currentThread?.id, setMessages]);
+  }, [currentThread?.id, currentThread?.messages, setMessages]);
 
   // メッセージが変更されたときにスレッドを更新
   const previousMessagesRef = React.useRef<Message[]>([]);
@@ -362,6 +386,7 @@ export default function Chat() {
         }
       } catch (error) {
         console.error('Failed to fetch models:', error);
+        // エラー詳細をユーザーに表示するためのstateを追加することもできます
       } finally {
         setLoadingModels(false);
       }
@@ -426,7 +451,7 @@ export default function Chat() {
     }
   };
 
-  // 初期チャット送信ハンドラー
+  // 初期チャット送信ハンドラー（完全修正版）
   const handleInitialSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!initialInput.trim() || initialInputStatus !== 'ready') return;
@@ -453,28 +478,33 @@ export default function Chat() {
         availableModels = data.models;
       }
       
-      // 新しいスレッドを作成
+      // メッセージとモデルを保存
+      const userMessage = initialInput.trim();
       const modelToUse = selectedInitialModel || availableModels[0]?.name || defaultModel;
-      const newThreadId = createThread(undefined, modelToUse);
       
-      // 入力値をクリア
-      const inputValue = initialInput;
+      // メッセージオブジェクトを作成
+      const userMessageObj = {
+        id: Date.now().toString(),
+        role: 'user' as const,
+        content: userMessage,
+      };
+      
+      // 初期メッセージ付きでスレッドを作成
+      const newThreadId = createThreadWithInitialMessage(userMessageObj, modelToUse);
+      
+      // 入力をクリア
       setInitialInput('');
       setInitialInputStatus('ready');
       
-      // 新しく作成されたスレッドに初期メッセージを追加
+      // 少し待ってから通常のuseChat/useThinkingChatフローを使用
       setTimeout(() => {
-        // useChatの入力フィールドに値を設定
-        handleInputChange({ target: { value: inputValue } } as any);
-        // フォームを送信
+        (handleInputChange as any)({ target: { value: userMessage } });
         setTimeout(() => {
-          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-          const form = document.querySelector('form[data-chat-form]');
-          if (form) {
-            form.dispatchEvent(submitEvent);
-          }
-        }, 50);
-      }, 100);
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true }) as any;
+          submitEvent.preventDefault = () => {};
+          handleSubmit(submitEvent);
+        }, 100);
+      }, 200);
       
     } catch (error) {
       console.error('Failed to create initial chat:', error);
@@ -488,6 +518,188 @@ export default function Chat() {
 
   // チャット送信が可能かどうかの判定
   const canSendMessage = currentModelExists === true && status === 'ready' && !checkingModel;
+
+  // 初期メッセージ処理中フラグ
+  const isInitialApiCallRef = useRef(false);
+
+  // 初期メッセージ用の直接API呼び出し
+  const handleDirectApiCall = async (threadId: string, userMessageObj: any, model: string) => {
+    try {
+      // 初期API呼び出し開始フラグを設定
+      isInitialApiCallRef.current = true;
+      // 応答時間測定開始
+      const startTime = Date.now();
+      setResponseStartTime(startTime);
+      responseStartTimeRef.current = startTime;
+      setTimeout(() => {
+        (setMessages as any)([userMessageObj]);
+      }, 50);
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [userMessageObj],
+          model: model,
+          temperature: 0.7,
+          maxTokens: 2000,
+          ollamaUrl: ollamaUrl,
+          attachments: [],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      let assistantMessage = '';
+      let thinking = '';
+
+      // アシスタントメッセージのプレースホルダー
+      const assistantMessageObj = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant' as const,
+        content: '',
+        thinking: undefined as string | undefined,
+      };
+
+      // ストリーミングレスポンスを処理
+      const reader = response.body?.getReader();
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.type === 'thinking') {
+                    thinking = parsed.content;
+                    assistantMessageObj.thinking = thinking;
+                  } else if (parsed.type === 'content') {
+                    assistantMessage += parsed.content;
+                    assistantMessageObj.content = assistantMessage;
+                  } else if (parsed.content) {
+                    assistantMessage += parsed.content;
+                    assistantMessageObj.content = assistantMessage;
+                  }
+                  
+                  // UIをリアルタイムで更新
+                  (setMessages as any)([userMessageObj, { ...assistantMessageObj }]);
+                } catch (e) {
+                  console.error('JSON parsing failed:', e);
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      // 最終的なメッセージの内容を更新
+      assistantMessageObj.content = assistantMessage;
+      assistantMessageObj.thinking = thinking || undefined;
+
+      // スレッドに両方のメッセージを更新
+      updateThreadMessages(threadId, [userMessageObj, assistantMessageObj]);
+      
+      // UIにも最終状態を反映（確実に表示されるよう少し遅延）
+      setTimeout(() => {
+        (setMessages as any)([userMessageObj, assistantMessageObj]);
+      }, 100);
+
+      // 応答時間を記録
+      if (responseStartTimeRef.current) {
+        const responseTime = Date.now() - responseStartTimeRef.current;
+        updateThreadMetadata(threadId, {}, responseTime, assistantMessageObj);
+        responseStartTimeRef.current = null;
+        setResponseStartTime(null);
+      }
+      
+      // 初期API呼び出し完了フラグをクリア
+      isInitialApiCallRef.current = false;
+      
+    } catch (error) {
+      console.error('Direct API call error:', error);
+      // エラー時はユーザーメッセージのみ表示
+      (setMessages as any)([userMessageObj]);
+      // 初期API呼び出し完了フラグをクリア
+      isInitialApiCallRef.current = false;
+    }
+  };
+
+
+  // ファイル処理のヘルパー関数
+  const handleFileSelect = useCallback((files: FileList) => {
+    Array.from(files).forEach(async (file) => {
+      // ファイルサイズ制限 (10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`ファイル "${file.name}" は10MBを超えています。`);
+        return;
+      }
+
+      // 許可されるファイル形式
+      const allowedTypes = ['text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        alert(`ファイル形式 "${file.type}" はサポートされていません。\n対応形式: TXT, MD, PDF, PNG, JPEG, GIF, WebP`);
+        return;
+      }
+
+      try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const attachment: FileAttachment = {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          data: base64,
+        };
+
+        setSelectedFiles(prev => [...prev, attachment]);
+      } catch (error) {
+        alert(`ファイル "${file.name}" の読み込みに失敗しました。`);
+      }
+    });
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    
+    if (e.dataTransfer.files) {
+      handleFileSelect(e.dataTransfer.files);
+    }
+  }, [handleFileSelect]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  }, []);
 
 
   if (!currentThread) {
@@ -971,7 +1183,58 @@ export default function Chat() {
                 `}>
                   <div className="prose prose-sm max-w-none">
                     {m.role === 'user' ? (
-                      <div className="whitespace-pre-wrap text-white">{m.content}</div>
+                      <div>
+                        {/* 添付ファイル表示 (ユーザーメッセージ) */}
+                        {(m as Message).attachments && (m as Message).attachments!.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <HiPaperClip className="w-4 h-4 text-blue-200" />
+                              <span className="text-sm font-medium text-blue-200">
+                                添付ファイル
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              {(m as Message).attachments!.map((file, index) => (
+                                <div key={index} className="flex items-center gap-2 p-2 bg-blue-600 bg-opacity-50 rounded border border-blue-400">
+                                  {file.type.startsWith('image/') ? (
+                                    <>
+                                      <HiPhoto className="w-4 h-4 text-blue-200 flex-shrink-0" />
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-medium text-blue-100 truncate">
+                                          {file.name}
+                                        </div>
+                                        <div className="text-xs text-blue-200">
+                                          画像ファイル • {(file.size / 1024).toFixed(1)} KB
+                                        </div>
+                                        {/* 画像プレビュー */}
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img 
+                                          src={file.data} 
+                                          alt={file.name}
+                                          className="mt-2 max-w-full max-h-48 rounded border border-blue-400"
+                                        />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <HiDocument className="w-4 h-4 text-blue-200 flex-shrink-0" />
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-medium text-blue-100 truncate">
+                                          {file.name}
+                                        </div>
+                                        <div className="text-xs text-blue-200">
+                                          {file.type} • {(file.size / 1024).toFixed(1)} KB
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap text-white">{m.content}</div>
+                      </div>
                     ) : (
                       <div className={theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}>
                         {/* Thinking section for gpt-oss models */}
@@ -1124,46 +1387,158 @@ export default function Chat() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto" data-chat-form>
-            <div className="flex gap-3">
-              <textarea
-                ref={inputRef}
-                className={`
-                  flex-1 p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none
-                  ${theme === 'dark'
-                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
-                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                  }
-                  ${!canSendMessage ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-                rows={input.split('\n').length || 1}
-                value={input}
-                placeholder={
-                  currentModelExists === false 
-                    ? "モデルが利用できません..." 
-                    : checkingModel 
-                      ? "モデルを確認中..." 
-                      : "メッセージを入力してください（Shift+Enterで送信）..."
-                }
-                onChange={(e) => handleInputChange(e as any)}
-                disabled={!canSendMessage}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.shiftKey) {
-                    e.preventDefault();
-                    if (canSendMessage && input.trim() && contextInfo?.warningLevel !== 'danger') {
-                      handleSubmit(e as any);
+            {/* 添付ファイル表示 */}
+            {selectedFiles.length > 0 && (
+              <div className={`mb-3 p-3 rounded-lg border ${
+                theme === 'dark' 
+                  ? 'bg-gray-800 border-gray-600' 
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <HiPaperClip className="w-4 h-4 text-gray-500" />
+                  <span className={`text-sm font-medium ${
+                    theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
+                    添付ファイル ({selectedFiles.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className={`flex items-center justify-between p-2 rounded border ${
+                      theme === 'dark' 
+                        ? 'bg-gray-700 border-gray-600' 
+                        : 'bg-white border-gray-200'
+                    }`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {file.type.startsWith('image/') ? (
+                          <HiPhoto className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        ) : (
+                          <HiDocument className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <div className={`text-sm font-medium truncate ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>
+                            {file.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className={`p-1 rounded hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors ${
+                          theme === 'dark' ? 'hover:bg-red-900' : ''
+                        }`}
+                        title="ファイルを削除"
+                      >
+                        <HiXMark className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* メイン入力エリア */}
+            <div 
+              className={`relative ${
+                isDragActive 
+                  ? `border-2 border-dashed border-blue-500 bg-blue-50 ${theme === 'dark' ? 'bg-blue-900' : ''}` 
+                  : ''
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {isDragActive && (
+                <div className={`absolute inset-0 flex items-center justify-center z-10 rounded-lg ${
+                  theme === 'dark' 
+                    ? 'bg-blue-900 bg-opacity-90' 
+                    : 'bg-blue-50 bg-opacity-90'
+                }`}>
+                  <div className="text-center">
+                    <HiPaperClip className="w-8 h-8 mx-auto mb-2 text-blue-500" />
+                    <p className={`text-sm font-medium ${
+                      theme === 'dark' ? 'text-blue-200' : 'text-blue-700'
+                    }`}>
+                      ファイルをドロップしてください
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <textarea
+                    ref={inputRef}
+                    className={`
+                      w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none
+                      ${theme === 'dark'
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                      }
+                      ${!canSendMessage ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                    rows={Math.max(1, input.split('\n').length)}
+                    value={input}
+                    placeholder={
+                      currentModelExists === false 
+                        ? "モデルが利用できません..." 
+                        : checkingModel 
+                          ? "モデルを確認中..." 
+                          : "メッセージを入力してください（Shift+Enterで送信）..."
                     }
-                  }
-                }}
-              />
-              <button
-                type="submit"
-                disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger')}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2 self-end"
-                title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
-              >
-                <HiPaperAirplane className="w-4 h-4" />
-                送信
-              </button>
+                    onChange={(e) => handleInputChange(e as any)}
+                    disabled={!canSendMessage}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.shiftKey) {
+                        e.preventDefault();
+                        if (canSendMessage && input.trim() && contextInfo?.warningLevel !== 'danger') {
+                          handleSubmit(e as any);
+                        }
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* ファイル添付ボタンと送信ボタン */}
+                <div className="flex flex-col gap-2 self-end">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.gif,.webp"
+                    onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!canSendMessage}
+                    className={`px-3 py-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+                      theme === 'dark'
+                        ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    title="ファイルを添付"
+                  >
+                    <HiPaperClip className="w-4 h-4" />
+                  </button>
+                  
+                  <button
+                    type="submit"
+                    disabled={!canSendMessage || !input.trim() || (contextInfo?.warningLevel === 'danger')}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                    title={contextInfo?.warningLevel === 'danger' ? 'コンテキスト制限に達しているため送信できません' : undefined}
+                  >
+                    <HiPaperAirplane className="w-4 h-4" />
+                    送信
+                  </button>
+                </div>
+              </div>
             </div>
           </form>
         </div>

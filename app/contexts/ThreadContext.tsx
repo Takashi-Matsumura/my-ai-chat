@@ -61,6 +61,7 @@ interface ThreadContextType {
   threads: ChatThread[];
   currentThread: ChatThread | null;
   createThread: (title?: string, model?: string) => string;
+  createThreadWithInitialMessage: (message: Message, model?: string) => string;
   switchThread: (threadId: string) => void;
   closeCurrentThread: () => void;
   deleteThread: (threadId: string) => void;
@@ -235,6 +236,35 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       id: generateId(),
       title: title || generateInitialTitle(),
       messages: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      model: model || defaultModel,
+      metadata: {
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalResponseTime: 0,
+        messageCount: 0,
+        averageResponseTime: 0,
+      },
+      parameters: {
+        temperature: 0.7,
+        maxTokens: 2000,
+        contextWindowSize: undefined,
+      },
+    };
+    
+    setThreads(prev => [newThread, ...prev]);
+    setCurrentThread(newThread);
+    return newThread.id;
+  };
+
+  const createThreadWithInitialMessage = (message: Message, model?: string): string => {
+    const title = generateThreadTitle([message]);
+    const newThread: ChatThread = {
+      id: generateId(),
+      title,
+      messages: [message],
       createdAt: new Date(),
       updatedAt: new Date(),
       model: model || defaultModel,
@@ -478,6 +508,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
       threads,
       currentThread,
       createThread,
+      createThreadWithInitialMessage,
       switchThread,
       closeCurrentThread,
       deleteThread,
