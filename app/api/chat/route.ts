@@ -50,34 +50,44 @@ async function streamOllamaWithThinking(options: any) {
     }
   }
   
-  // まずは非ストリーミングでthinkingデータを取得
+  // gpt-ossモデルかどうかを判定
+  const isThinkingModel = model.includes('gpt-oss');
+  
+  // まずは非ストリーミングでthinkingデータを取得（gpt-ossモデルのみ）
+  let fullThinkingData = '';
+  if (isThinkingModel) {
+    try {
+      const nonStreamResponse = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: processedMessages,
+          stream: false,
+          options: {
+            temperature: temperature,
+            num_predict: maxTokens,
+          }
+        }),
+      });
+      
+      const nonStreamData = await nonStreamResponse.json();
+      fullThinkingData = nonStreamData.message?.thinking || '';
+    } catch (error) {
+      console.error('Failed to fetch thinking data:', error);
+    }
+  }
+    
+  // ストリーミングでcontentを取得
   try {
-    const nonStreamResponse = await fetch(`${baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: processedMessages,
-        stream: false,
-        options: {
-          temperature: temperature,
-          num_predict: maxTokens,
-        }
-      }),
-    });
-    
-    const nonStreamData = await nonStreamResponse.json();
-    const fullThinkingData = nonStreamData.message?.thinking || '';
-    
-    // 今度はストリーミングでcontentを取得
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // まずthinkingデータを送信
-          if (fullThinkingData) {
+          // thinkingデータを送信（gpt-ossモデルのみ）
+          if (fullThinkingData && isThinkingModel) {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({
                 type: 'thinking',
@@ -126,14 +136,24 @@ async function streamOllamaWithThinking(options: any) {
                   const parsed = JSON.parse(line);
                   
                   if (parsed.message) {
-                    // 通常のコンテンツのみをストリーミング（thinkingは既に送信済み）
+                    // コンテンツをストリーミング
                     if (parsed.message.content) {
-                      controller.enqueue(
-                        encoder.encode(`data: ${JSON.stringify({
-                          type: 'content',
-                          content: parsed.message.content
-                        })}\n\n`)
-                      );
+                      if (isThinkingModel) {
+                        // gpt-ossモデル: type付きでストリーミング
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({
+                            type: 'content',
+                            content: parsed.message.content
+                          })}\n\n`)
+                        );
+                      } else {
+                        // 通常モデル: 直接contentでストリーミング
+                        controller.enqueue(
+                          encoder.encode(`data: ${JSON.stringify({
+                            content: parsed.message.content
+                          })}\n\n`)
+                        );
+                      }
                     }
                   }
                   
@@ -198,48 +218,13 @@ export async function POST(req: Request) {
   });
 
 
-  // gpt-oss models でThinkingサポートが必要な場合はカスタムストリーミング
-  if (model.includes('gpt-oss')) {
-    return streamOllamaWithThinking({
-      baseUrl,
-      model,
-      messages,
-      temperature,
-      maxTokens: contextWindowSize && contextWindowSize > 0 ? Math.min(contextWindowSize, maxTokens) : maxTokens,
-      attachments,
-    });
-  }
-
-  // 添付ファイルがある場合はメッセージに追加
-  const processedMessages = [...messages];
-  if (attachments && attachments.length > 0 && processedMessages.length > 0) {
-    const lastMessage = processedMessages[processedMessages.length - 1];
-    if (lastMessage.role === 'user') {
-      lastMessage.content += processAttachmentsForOllama(attachments);
-    }
-  }
-
-  // Ollamaのパラメータ設定
-  const streamOptions: any = {
-    model: openai(model),
-    messages: processedMessages,
-    temperature: temperature,
-    maxTokens: maxTokens,
-    async onFinish({ text, toolCalls, toolResults, usage, finishReason }: any) {
-      // implement your own logic here, e.g. for storing messages
-      // or recording token usage
-    },
-  };
-
-  // コンテキストウィンドウサイズが指定されている場合は追加
-  if (contextWindowSize && contextWindowSize > 0) {
-    // AI SDKではmaxTokensでコンテキスト制限を制御
-    streamOptions.maxTokens = Math.min(contextWindowSize, maxTokens);
-  }
-
-  // Call the language model
-  const result = streamText(streamOptions);
-
-  // Respond with the stream
-  return result.toDataStreamResponse();
+  // すべてのモデルでカスタムストリーミングを使用（一貫したデータ形式）
+  return streamOllamaWithThinking({
+    baseUrl,
+    model,
+    messages,
+    temperature,
+    maxTokens: contextWindowSize && contextWindowSize > 0 ? Math.min(contextWindowSize, maxTokens) : maxTokens,
+    attachments,
+  });
 }

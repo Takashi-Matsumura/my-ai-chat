@@ -4,6 +4,7 @@ import { Message as BaseMessage } from '@ai-sdk/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { isThinkingModel } from './utils/modelUtils';
 import { useThread } from './contexts/ThreadContext';
 import { useTheme } from './contexts/ThemeContext';
 import { useOllama } from './contexts/OllamaContext';
@@ -441,7 +442,28 @@ export default function Chat() {
         };
         
         const newThreadId = createThreadWithInitialMessage(userMessage, modelToUse);
-        thread = { id: newThreadId, model: modelToUse, messages: [] };
+        // 新しく作成されたスレッドオブジェクトを作成（createThreadWithInitialMessageが完全なスレッドを返すと仮定）
+        thread = {
+          id: newThreadId,
+          model: modelToUse,
+          messages: [],
+          title: '',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            totalTokens: 0,
+            promptTokens: 0,
+            completionTokens: 0,
+            totalResponseTime: 0,
+            messageCount: 0,
+            averageResponseTime: 0
+          },
+          parameters: {
+            temperature: 0.7,
+            maxTokens: 2000,
+            contextWindowSize: undefined
+          }
+        };
       }
       
       // 3️⃣ メッセージ準備
@@ -463,6 +485,11 @@ export default function Chat() {
       
       // 5️⃣ ストリーミング処理
       setStatus('streaming');
+      
+      // モデルタイプ判定
+      const modelName = thread.model || defaultModel;
+      const isThinking = isThinkingModel(modelName);
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -470,7 +497,7 @@ export default function Chat() {
         },
         body: JSON.stringify({
           messages: [...currentMessages, userMessage],
-          model: thread.model || defaultModel,
+          model: modelName,
           temperature: thread.parameters?.temperature || 0.7,
           maxTokens: thread.parameters?.maxTokens || 2000,
           contextWindowSize: thread.parameters?.contextWindowSize,
@@ -487,14 +514,19 @@ export default function Chat() {
       let thinking = '';
 
       // アシスタントメッセージのプレースホルダー
+      const assistantMessageId = (Date.now() + 1).toString();
       const assistantMessageObj = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMessageId,
         role: 'assistant' as const,
         content: '',
-        thinking: undefined as string | undefined,
+        thinking: isThinking ? undefined as string | undefined : undefined,
       };
+      
+      // 初期メッセージリストを設定（一度だけ）
+      const initialMessages = [...currentMessages, userMessage, assistantMessageObj];
+      (setMessages as any)(initialMessages);
 
-      // ストリーミングレスポンス処理
+      // ストリーミングレスポンス処理（モデルタイプで分岐）
       const reader = response.body?.getReader();
       if (reader) {
         try {
@@ -506,28 +538,35 @@ export default function Chat() {
             const lines = chunk.split('\n');
 
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') continue;
+              if (line.trim() === '' || !line.startsWith('data: ')) continue;
+              
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const parsed = JSON.parse(data);
                 
-                try {
-                  const parsed = JSON.parse(data);
+                if (isThinking) {
+                  // Thinkingモデルの処理
                   if (parsed.type === 'thinking') {
                     thinking = parsed.content;
                     assistantMessageObj.thinking = thinking;
                   } else if (parsed.type === 'content') {
                     assistantMessage += parsed.content;
                     assistantMessageObj.content = assistantMessage;
-                  } else if (parsed.content) {
+                  }
+                } else {
+                  // 通常モデルの処理
+                  if (parsed.content) {
                     assistantMessage += parsed.content;
                     assistantMessageObj.content = assistantMessage;
                   }
-                  
-                  // リアルタイムUI更新
-                  (setMessages as any)([...currentMessages, userMessage, { ...assistantMessageObj }]);
-                } catch (e) {
-                  console.error('JSON parsing failed:', e);
                 }
+                
+                // リアルタイムUI更新
+                (setMessages as any)([...currentMessages, userMessage, { ...assistantMessageObj }]);
+              } catch (e) {
+                // JSON パースエラーは無視
               }
             }
           }
@@ -538,7 +577,9 @@ export default function Chat() {
 
       // 6️⃣ 完了処理
       assistantMessageObj.content = assistantMessage;
-      assistantMessageObj.thinking = thinking || undefined;
+      if (isThinking) {
+        assistantMessageObj.thinking = thinking || undefined;
+      }
 
       const finalMessages = [...currentMessages, userMessage, assistantMessageObj];
       updateThreadMessages(thread.id, finalMessages);
@@ -690,6 +731,28 @@ export default function Chat() {
               `}>
                 チャットアプリ
               </h1>
+              
+              {/* モデル選択コンボボックス */}
+              <div className="flex items-center gap-2 ml-4">
+                <select
+                  value={selectedInitialModel || defaultModel}
+                  onChange={(e) => setSelectedInitialModel(e.target.value)}
+                  className={`
+                    px-3 py-1 rounded-md border text-sm font-medium
+                    ${theme === 'dark'
+                      ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }
+                  `}
+                  disabled={checkingModel}
+                >
+                  {models.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -790,44 +853,25 @@ export default function Chat() {
               </form>
               
               {/* シンプルなモデル表示とモデル管理へのリンク */}
-              <div className="mt-6 max-w-4xl mx-auto">
-                <div className="text-center">
-                  <a
-                    href="/settings"
-                    className={`
-                      inline-flex items-center gap-3 py-3 px-4 rounded-lg transition-colors cursor-pointer
-                      ${theme === 'dark' 
-                        ? 'bg-gray-800 border border-gray-700 hover:bg-gray-750 hover:border-gray-600' 
-                        : 'bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                      }
-                    `}
-                    title="クリックしてモデルを管理"
-                  >
-                    <HiCog6Tooth className={`w-4 h-4 ${theme === 'dark' ? 'text-gray-400 group-hover:text-gray-300' : 'text-gray-500 group-hover:text-gray-600'}`} />
-                    <span className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
-                      使用モデル: {selectedInitialModel || (models.length > 0 ? models[0].name : 'デフォルト')}
-                    </span>
-                  </a>
-                  
-                  {/* モデルが見つからない場合の警告 */}
-                  {!loadingModels && models.length === 0 && (
-                    <div className="mt-3">
-                      <div className={`inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
-                        theme === 'dark' ? 'bg-red-900 text-red-200' : 'bg-red-50 text-red-700'
-                      }`}>
-                        <HiExclamationTriangle className="w-4 h-4" />
-                        <span>LLMモデルが見つかりません</span>
-                        <a
-                          href="/settings"
-                          className="ml-2 underline hover:no-underline"
-                        >
-                          モデルをダウンロード
-                        </a>
-                      </div>
+              {/* モデルが見つからない場合の警告 */}
+              {!loadingModels && models.length === 0 && (
+                <div className="mt-6 max-w-4xl mx-auto">
+                  <div className="text-center">
+                    <div className={`inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                      theme === 'dark' ? 'bg-red-900 text-red-200' : 'bg-red-50 text-red-700'
+                    }`}>
+                      <HiExclamationTriangle className="w-4 h-4" />
+                      <span>LLMモデルが見つかりません</span>
+                      <a
+                        href="/settings"
+                        className="ml-2 underline hover:no-underline"
+                      >
+                        モデルをダウンロード
+                      </a>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
               
             </div>
           </div>
@@ -1197,8 +1241,8 @@ export default function Chat() {
                       </div>
                     ) : (
                       <div className={theme === 'dark' ? 'text-gray-100' : 'text-gray-800'}>
-                        {/* Thinking section for all models */}
-                        {(m as Message).thinking && (
+                        {/* Thinking section for thinking models only */}
+                        {(m as Message).thinking && isThinkingModel(currentThread?.model || '') && (
                           <details className={`mb-4 p-3 rounded-lg border-l-4 ${
                             theme === 'dark' 
                               ? 'bg-blue-900 border-blue-600 text-blue-100' 

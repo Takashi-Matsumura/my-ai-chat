@@ -25,11 +25,9 @@ interface OllamaModel {
 
 interface ModelManagerProps {
   onClose: () => void;
-  onModelSelected?: (modelName: string) => void;
-  selectedModel?: string;
 }
 
-export default function ModelManager({ onClose, onModelSelected, selectedModel }: ModelManagerProps) {
+export default function ModelManager({ onClose }: ModelManagerProps) {
   const { theme } = useTheme();
   const { ollamaUrl } = useOllama();
   
@@ -366,7 +364,7 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
               LLMモデル管理
             </h1>
             <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-              モデルの選択、ダウンロード、インストールを管理
+              モデルのダウンロード、インストールを管理
             </p>
           </div>
 
@@ -446,7 +444,7 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
                   インストール済みモデル
                 </h2>
                 <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                  現在利用可能なモデルから選択してください
+                  現在インストールされているモデル一覧
                 </p>
               </div>
 
@@ -479,17 +477,12 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
                     <div
                       key={model.name}
                       className={`
-                        p-4 border rounded-lg cursor-pointer transition-colors
-                        ${selectedModel === model.name
-                          ? theme === 'dark'
-                            ? 'bg-blue-900 border-blue-700'
-                            : 'bg-blue-50 border-blue-200'
-                          : theme === 'dark'
-                            ? 'bg-gray-800 border-gray-700 hover:bg-gray-750'
-                            : 'bg-white border-gray-200 hover:bg-gray-50'
+                        p-4 border rounded-lg
+                        ${theme === 'dark'
+                          ? 'bg-gray-800 border-gray-700'
+                          : 'bg-white border-gray-200'
                         }
                       `}
-                      onClick={() => onModelSelected?.(model.name)}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -497,9 +490,6 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
                             <h3 className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                               {model.name}
                             </h3>
-                            {selectedModel === model.name && (
-                              <HiCheckCircle className="w-5 h-5 text-blue-500" />
-                            )}
                           </div>
                           <p className={`text-sm mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                             サイズ: {Math.round(model.size / (1024 * 1024 * 1024) * 10) / 10} GB
@@ -511,10 +501,7 @@ export default function ModelManager({ onClose, onModelSelected, selectedModel }
                         
                         {/* アンインストールボタン */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowUninstallDialog(model.name);
-                          }}
+                          onClick={() => setShowUninstallDialog(model.name)}
                           disabled={isUninstallBlocked}
                           className={`
                             ml-3 p-2 rounded-md transition-colors
