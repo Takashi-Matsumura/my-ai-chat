@@ -1,10 +1,12 @@
+import { getDefaultOllamaUrl } from '../../utils/environment';
+
 export async function GET(request: Request) {
   // URLからクエリパラメータを取得
   const { searchParams } = new URL(request.url);
   const customOllamaUrl = searchParams.get('ollamaUrl');
   
-  // Ollama URLを決定（優先順位: クエリパラメータ > 環境変数 > デフォルト）
-  const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || 'http://localhost:11434';
+  // Ollama URLを決定（優先順位: クエリパラメータ > 環境変数 > 環境自動判定）
+  const ollamaUrl = customOllamaUrl || process.env.OLLAMA_URL || getDefaultOllamaUrl();
   
   try {
     const response = await fetch(`${ollamaUrl}/api/tags`);

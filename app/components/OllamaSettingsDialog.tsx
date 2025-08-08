@@ -14,7 +14,7 @@ interface OllamaSettingsDialogProps {
 
 export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: OllamaSettingsDialogProps) {
   const { theme } = useTheme();
-  const { ollamaUrl, setOllamaUrl, resetToDefault, isDefaultUrl } = useOllama();
+  const { ollamaUrl, setOllamaUrl, resetToDefault, isDefaultUrl, environmentInfo } = useOllama();
   const [inputUrl, setInputUrl] = useState<string>(ollamaUrl);
   const [isValidUrl, setIsValidUrl] = useState<boolean>(true);
   const [isTesting, setIsTesting] = useState<boolean>(false);
@@ -184,6 +184,38 @@ export default function OllamaSettingsDialog({ isOpen, onClose, onUrlChanged }: 
                 デフォルト設定を使用中
               </p>
             )}
+          </div>
+
+          {/* 環境情報 */}
+          <div className={`
+            p-3 rounded-lg border
+            ${theme === 'dark' 
+              ? 'bg-blue-900/20 border-blue-700/30 text-blue-200' 
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+            }
+          `}>
+            <div className="flex items-center gap-2 mb-2">
+              <HiGlobeAlt className="w-4 h-4" />
+              <span className="text-sm font-medium">実行環境</span>
+            </div>
+            <div className="text-sm space-y-1">
+              <p>
+                <span className="font-medium">環境:</span>{' '}
+                <span className="capitalize">
+                  {environmentInfo.environment === 'docker' ? 'Docker コンテナ' : 
+                   environmentInfo.environment === 'development' ? 'ローカル開発' : 
+                   '本番環境'}
+                </span>
+              </p>
+              <p>
+                <span className="font-medium">推奨URL:</span>{' '}
+                <code className={`px-1 py-0.5 rounded text-xs ${
+                  theme === 'dark' ? 'bg-blue-800/50' : 'bg-blue-100'
+                }`}>
+                  {environmentInfo.defaultOllamaUrl}
+                </code>
+              </p>
+            </div>
           </div>
 
           {/* URL入力 */}

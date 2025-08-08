@@ -1,20 +1,29 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getDefaultOllamaUrl, getEnvironmentInfo } from '../utils/environment';
 
 interface OllamaContextType {
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
   resetToDefault: () => void;
   isDefaultUrl: boolean;
+  environmentInfo: {
+    environment: string;
+    defaultOllamaUrl: string;
+    isDocker: boolean;
+    isDevelopment: boolean;
+    isProduction: boolean;
+  };
 }
 
 const OllamaContext = createContext<OllamaContextType | undefined>(undefined);
 
-const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 const STORAGE_KEY = 'ollama-url';
 
 export function OllamaProvider({ children }: { children: ReactNode }) {
+  const [environmentInfo] = useState(() => getEnvironmentInfo());
+  const DEFAULT_OLLAMA_URL = environmentInfo.defaultOllamaUrl;
   const [ollamaUrl, setOllamaUrlState] = useState<string>(DEFAULT_OLLAMA_URL);
 
   // ローカルストレージからURL設定を読み込み
@@ -53,6 +62,7 @@ export function OllamaProvider({ children }: { children: ReactNode }) {
       setOllamaUrl,
       resetToDefault,
       isDefaultUrl,
+      environmentInfo,
     }}>
       {children}
     </OllamaContext.Provider>
